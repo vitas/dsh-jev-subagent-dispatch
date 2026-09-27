@@ -1,6 +1,8 @@
 # dsh-jev-subagent-dispatch
 
-**Jev-guided subagent dispatch for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness).** The plugin asks [Jev](https://docs.typesafe.ai) — TypeSafe's typed-decision model — a handful of atomic questions about the task, applies your routing policy, and appends a **dispatch recommendation**: which subagent model route should take the turn. The division of labor is deliberate — Jev guides, the main agent performs the handoff through the harness-native subagent tool; the plugin owns no delegation machinery of its own.
+**Cut LLM costs: routine tasks go to cheap subagent models; the main model keeps the hard parts.**
+
+Jev-guided subagent dispatch for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness): the plugin asks [Jev](https://docs.typesafe.ai) — TypeSafe's typed-decision model — a handful of atomic questions about the task, applies your routing policy, and appends a **dispatch recommendation**: which subagent model route should take the turn. The division of labor is deliberate — Jev guides, the main agent performs the handoff through the harness-native subagent tool; the plugin owns no delegation machinery of its own.
 
 Jev does not write code and is not a chat LLM. It answers typed questions (`choice` / `score` / `noul`) with probabilities and a confidence, in one parallel pass, in tens of milliseconds. That makes it an ideal guide: the expensive main agent stops spending tokens deciding *who should do the work*.
 

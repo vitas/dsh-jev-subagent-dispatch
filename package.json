@@ -1,7 +1,7 @@
 {
   "name": "dsh-jev-subagent-dispatch",
   "version": "0.1.2",
-  "description": "Jev-guided subagent dispatch for DeepSeek Harness: classifies a task with a System One model and recommends which subagent model route should take the turn; the main agent performs the handoff",
+  "description": "Cut LLM costs: route routine tasks to cheap subagent models (DeepSeek Harness plugin)",
   "license": "MIT",
   "type": "module",
   "main": "./index.mjs",
