@@ -1,0 +1,191 @@
+# Bundle-layer patch for dsh-jev-subagent-dispatch.
+#
+# Applied by the loader when this package is listed in `dsh.profile.bundles`
+# (or installed with `dsh plugin add`), BEFORE the profile's own
+# `cordis.patch.yml`. Every value here is a neutral default: the user's
+# profile patch addresses the same row by id (`- id: jev-subagent-dispatch`) and its
+# `config` merges over this one (per-key for questions/routes, deep for
+# profiles), and with `patchReload: live` profile-patch edits apply without a
+# restart.
+#
+# The `questions` map uses TypeSafe's documented request shape exactly (map
+# keyed by question id; `type` + `instructions` + `criteria`) — what is
+# configured is what goes on the wire. Choice criteria is a map of option
+# name → description; Score criteria is an ordered array of level
+# descriptions (the answer's `score` is a position 0..n that may land
+# between two levels); Noul takes optional `criteria: { true, false }`.
+#
+# v1 ships no settings card: the profile patch IS the settings surface.
+
+- insert:
+    - id: jev-subagent-dispatch
+      name: dsh-jev-subagent-dispatch
+      config:
+        # --- Activation ------------------------------------------------------
+        # The opt-in starting point. `off` (this default) registers nothing —
+        # no pre-step listener, no calls, no data sharing. `once` registers
+        # the listener but classifies ONLY turns that explicitly ask for it:
+        # a "/route fix the failing tests" or "/jev should I delegate this?"
+        # trigger — one call per request, predictable cost. "auto" classifies
+        # every plain user turn; enable it only when the verdict log has
+        # earned it. `/route preview <task>` renders an evaluation-only
+        # verdict (never a delegation brief) in either listening mode.
+        mode: off
+        triggers: ["/route", "/jev"]
+
+        # --- The deciding model (TypeSafe System One) ---------------------
+        # The key's issuer determines the endpoint, API path, credential
+        # variable, and pinned model id — one shared question format and
+        # routing policy sits on top. Provider presets:
+        #
+        #   typesafe:   https://api.typesafe.ai/v1/systemone  jev-1.13.0  (TYPESAFE_API_KEY)
+        #   bai:        https://api.b.ai/v1/decisions         jev-1.13.0  (OPENROUTER_API_KEY)
+        #   openrouter: https://openrouter.ai/api/v1/systemone  jev-1.13  (OPENROUTER_API_KEY)
+        #
+        # Explicit endpoint/apiPath/apiKeyEnv/model values in this row
+        # override the preset. The response's `model` field is logged with
+        # every verdict so drift is visible in the log.
+        provider: typesafe
+        timeoutMs: 900
+
+        # Mock mode answers from keywords with fixed confidence — wiring
+        # test without a key. Never ship it on: it classifies nothing.
+        mock: false
+
+        # --- Privacy -------------------------------------------------------
+        # The state sent to TypeSafe is the REDACTED user turn plus the
+        # workspace path, capped from the head. Credential-shaped strings
+        # (sk-…, ghp_…, AKIA…, Bearer …, api_key=…, long base64 tokens) are
+        # replaced with [redacted] before anything leaves the machine; add
+        # your own regex sources to redactPatterns. Logging is opt-in: see
+        # logDir below.
+        stateChars: 1200
+        redactPatterns: []
+
+        # --- What gets decided (the rubric) --------------------------------
+        questions:
+          task_class:
+            type: choice
+            instructions: Which class does this coding task fall into?
+            criteria:
+              mechanical: >-
+                Rename, reformat, boilerplate, comments or docstrings —
+                mechanical edits with an unambiguous spec.
+              bugfix: >-
+                Fix a failing thing whose cause is understood; the fix
+                itself is contained.
+              feature_work: Add behavior that changes what the product does.
+              refactor: >-
+                Restructure code without changing behavior; design decisions
+                involved.
+              research: >-
+                Gather facts, read code, compare options; change nothing.
+              meta_chat: >-
+                Conversation, questions, or planning; no code task in this
+                turn.
+          effort:
+            type: score
+            instructions: How much work is this task?
+            criteria:
+              - S — one file, minutes of work
+              - M — a few files, contained; an hour or two
+              - L — many files or a full day of work
+              - XL — multiple days, cross-cutting design work
+          blast_radius:
+            type: score
+            instructions: >-
+              If this task is done wrong, what is the worst credible
+              consequence?
+            criteria:
+              - trivial — nothing of consequence can break
+              - module — one internal module misbehaves
+              - cross_module — several internal modules misbehave
+              - public_api — published interfaces, schemas, or user-visible
+                behavior break
+              - infra — build, CI, credentials, data, or production systems
+                break
+          needs_repo_context:
+            type: noul
+            instructions: >-
+              Doing this task well requires reading and reconciling several
+              modules of this repository, not just the named files.
+          user_explicit:
+            type: noul
+            instructions: >-
+              The user explicitly asked the main agent to do this task
+              itself or to plan first, rather than just get it done.
+            criteria:
+              true: >-
+                The user addressed the main agent directly: "you do it",
+                "plan first", "stay in this session".
+              false: >-
+                The user just wants the outcome; who does the work is
+                unspecified.
+          risky:
+            type: noul
+            instructions: >-
+              The task touches secrets, credentials, data migrations,
+              infrastructure, or destructive operations.
+            criteria:
+              true: >-
+                Credentials, production data, migrations, deploy scripts, or
+                irreversible operations are in play.
+              false: Ordinary code changes only.
+
+        # --- How the verdict is acted on (the policy) ----------------------
+        # `delegate` is a declarative predicate over the answers. Choice
+        # answers compare by option name; Score answers are numeric
+        # positions (possibly FRACTIONAL — 1.5 means "between M and L")
+        # compared against the ceilings (score ≤ ceiling passes); noul
+        # answers are probabilities compared against maxNoul ceilings. If
+        # the predicate holds AND the primary confidence clears
+        # `confidenceMin`, the verdict message recommends the route chosen
+        # by `routeFor` (fallback `defaultRoute`). The recommendation is
+        # advice the main agent may weigh and ignore — measure it via the
+        # verdict log before trusting it.
+        activeProfile: auto
+        profiles:
+          auto:
+            confidenceMin: 0.7
+            delegate:
+              taskClass: [mechanical, bugfix, research]
+              effortMax: 1.5
+              blastRadiusMax: 1.5
+              maxNoul:
+                needs_repo_context: 0.5
+                user_explicit: 0.3
+                risky: 0.2
+          careful:
+            confidenceMin: 0.85
+            delegate:
+              taskClass: [mechanical]
+              effortMax: 0.5
+              blastRadiusMax: 0.5
+              maxNoul:
+                needs_repo_context: 0.2
+                user_explicit: 0.1
+                risky: 0.05
+        routeFor:
+          mechanical: implementer
+          bugfix: implementer
+          research: researcher
+        defaultRoute: implementer
+        routes:
+          implementer:
+            provider: openrouter
+            model: deepseek-v4-flash
+          researcher:
+            provider: openrouter
+            model: qwen3.8-flash
+
+        # --- Behavior edges --------------------------------------------------
+        # Never classify subagent sessions (only the main agent routes).
+        skipSubagentSessions: true
+        # Opt-in observability: set logDir to a directory path to enable NDJSON
+        # verdict logging; null or "" keeps it OFF. Even when enabled, the
+        # user's turn text reaches the log only if logTurnText is true.
+        logDir: null
+        logTurnText: false
+        # Include a fallback line in the injected message telling the agent
+        # what to do when the subagent tool is unavailable.
+        includeFallbackLine: true
