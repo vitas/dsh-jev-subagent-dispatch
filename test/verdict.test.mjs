@@ -10,7 +10,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { defaults, mergeDefaults, PROVIDER_PRESETS, resolveConfig, validate } from "../config.mjs";
+import { defaults, PROVIDER_PRESETS, resolveConfig, validate } from "../config.mjs";
 import { buildRequestBody, buildRequestUrl, normalizeAnswers } from "../jev.mjs";
 import { apply } from "../index.mjs";
 import { checkDispatchCapabilities, delegationDepthOf, routeAdviceFor } from "../capabilities.mjs";
@@ -443,6 +443,8 @@ test("host: logging is opt-in, excludes turn text by default, and records usage"
     const line = JSON.parse(await readFile(join(dir, "verdicts.ndjson"), "utf8"));
     assert.equal(line.turn, undefined); // logTurnText defaults to false
     assert.equal(line.action, "delegate");
+    assert.equal(line.delivered, false); // factory unavailable → nothing was injected
+    assert.match(line.id, /^[0-9a-f-]{36}$/); // ledger correlation id
     assert.equal(line.role, "implementer");
     assert.ok("usage" in line);
     assert.ok(!JSON.stringify(line).includes("sk-abcdefghijklmnop"));
@@ -658,4 +660,116 @@ test("host: services are re-resolved at request time, not boot time", async () =
   await handler(stepInput("rename foo everywhere"), async () => decision);
   await handler(stepInput("rename foo everywhere"), async () => decision);
   assert.ok(ctx.serviceGets >= 6); // three services, read again per request
+});
+
+test("triggers: a word boundary separates /route from /router", () => {
+  const once = resolveConfig({ mode: "once" });
+  assert.equal(findTrigger([{ role: "user", content: [{ type: "text", text: "/router fix the failing tests" }] }], once), null);
+  assert.equal(findTrigger([{ role: "user", content: [{ type: "text", text: "/routes fix it" }] }], once), null);
+  const bare = findTrigger([{ role: "user", content: [{ type: "text", text: "/route" }] }], once);
+  assert.deepEqual({ ...bare, trigger: bare.trigger }, { action: "route", task: "", trigger: "/route" });
+  const spaced = findTrigger([{ role: "user", content: [{ type: "text", text: "/ROUTE fix it" }] }], once);
+  assert.equal(spaced?.action, "route");
+});
+
+test("verdict: skip decisions keep their answers for log and preview", () => {
+  const normalized = normalizeAnswers(documentedAnswers(), config.questions);
+  const tight = { ...config, profiles: { ...config.profiles, auto: { ...config.profiles.auto, delegate: { ...config.profiles.auto.delegate, effortMax: 0.5 } } } };
+  const decision = decide({ answers: normalized, model: "m" }, tight);
+  assert.equal(decision.action, "skip");
+  assert.match(decision.reason, /effort 1\.4 > effortMax/);
+  assert.ok(decision.answers?.task_class, "skip must retain answers");
+});
+
+test("preview: a skipped verdict renders with its answers and no route advice", () => {
+  const normalized = normalizeAnswers(documentedAnswers(), config.questions);
+  const tight = { ...config, profiles: { ...config.profiles, auto: { ...config.profiles.auto, delegate: { ...config.profiles.auto.delegate, effortMax: 0.5 } } } };
+  const decision = decide({ answers: normalized, model: "m" }, tight);
+  const text = renderVerdictMessage(decision, config, { preview: true });
+  assert.match(text, /PREVIEW/);
+  assert.match(text, /verdict: skip/);
+  assert.match(text, /class: mechanical/);
+  assert.doesNotMatch(text, /recommended route/);
+  assert.doesNotMatch(text, /self-contained brief/);
+});
+
+test("host: a previewed miss injects the skip verdict, not silence", async () => {
+  const ctx = fakeContext();
+  apply(ctx, { mode: "once", mock: true, profiles: { auto: { delegate: { effortMax: 0.5 } } } }, {
+    services: capableServices(),
+    pluginMessage: async (text) => ({ role: "user", content: [{ type: "text", text }], source: { kind: "plugin:jev-subagent-dispatch" } }),
+  });
+  const { handler } = ctx.calls[0];
+  const turn = stepInput("/route preview architecture redesign request");
+  const result = await handler(turn, async () => ({ kind: "enter", messages: [...turn.messages] }));
+  const text = result.messages[1].content[0].text;
+  assert.match(text, /PREVIEW/);
+  assert.match(text, /verdict: skip/);
+  assert.match(text, /effort/);
+});
+
+test("advice: a fork-only setup never names a model", () => {
+  const route = { provider: "openrouter", model: "deepseek-v4-flash" };
+  assert.deepEqual(routeAdviceFor("named", route, [{ provider: "openrouter", model: "deepseek-v4-flash" }], "subagent_fork"), { kind: "fork" });
+  assert.deepEqual(routeAdviceFor("fixed", route, undefined, "subagent_fork"), { kind: "fork" });
+  assert.deepEqual(routeAdviceFor("named", route, [{ provider: "openrouter", model: "deepseek-v4-flash" }], "subagent"), { kind: "named", route });
+
+  const forkOnly = {
+    tools: { get: (name) => (name === "subagent_fork" ? { name } : undefined) },
+    subagents: { getProvider: (name) => ({ name }), resolveMaxDepth: () => 8 },
+  };
+  const check = checkDispatchCapabilities(forkOnly, { session: {} });
+  assert.equal(check.ok, true);
+  assert.equal(check.toolName, "subagent_fork");
+  const decision = { action: "delegate", answers: { task_class: { value: "mechanical" } }, role: "implementer", confidence: 0.9, route };
+  const text = renderVerdictMessage(decision, config, { routeAdvice: routeAdviceFor("named", route, [{ provider: "openrouter", model: "deepseek-v4-flash" }], check.toolName) });
+  assert.match(text, /subagent_fork → the fork inherits your model and context/);
+  assert.doesNotMatch(text, /deepseek-v4-flash/);
+});
+
+test("host: a delivered recommendation logs delivered true", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "jev-router-delivered-"));
+  try {
+    const ctx = fakeContext();
+    apply(ctx, { mode: "auto", mock: true, logDir: dir }, {
+      services: capableServices(),
+      pluginMessage: async (text) => ({ role: "user", content: [{ type: "text", text }], source: { kind: "plugin:jev-subagent-dispatch" } }),
+    });
+    const { handler } = ctx.calls[0];
+    const turn = stepInput("rename the config keys everywhere");
+    await handler(turn, async () => ({ kind: "enter", messages: [...turn.messages] }));
+    const line = JSON.parse(await readFile(join(dir, "verdicts.ndjson"), "utf8"));
+    assert.equal(line.action, "delegate");
+    assert.equal(line.delivered, true);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("policy: per-level probability ceilings gate the tail risk", () => {
+  const base = normalizeAnswers(documentedAnswers(), config.questions);
+  const lowAverageHighTail = {
+    ...base,
+    blast_radius: {
+      type: "score",
+      value: 0,
+      legend: ["trivial", "module", "public_api", "infra", "catastrophic"],
+      probabilities: { trivial: 0.9, module: 0.08, public_api: 0.013, infra: 0.005, catastrophic: 0.002 },
+      confidence: 0.9,
+    },
+  };
+  const gated = (max) => ({
+    ...config,
+    profiles: { ...config.profiles, auto: { ...config.profiles.auto, delegate: { ...config.profiles.auto.delegate, probabilityMax: { blast_radius: { infra: max } } } } },
+  });
+  const blocked = decide({ answers: lowAverageHighTail, model: "m" }, gated(0.002));
+  assert.equal(blocked.action, "skip");
+  assert.match(blocked.reason, /P\(infra\) 0\.01 > 0\.002/);
+  assert.equal(decide({ answers: lowAverageHighTail, model: "m" }, gated(0.01)).action, "delegate");
+  // fails closed when the model omits usable probabilities
+  const noProbabilities = { ...lowAverageHighTail, blast_radius: { ...lowAverageHighTail.blast_radius, probabilities: undefined } };
+  const blockedMissing = decide({ answers: noProbabilities, model: "m" }, gated(0.01));
+  assert.equal(blockedMissing.action, "skip");
+  assert.match(blockedMissing.reason, /probabilities missing/);
+  assert.throws(() => resolveConfig({ profiles: { auto: { delegate: { probabilityMax: { blast_radius: { infra: 1.5 } } } } } }), /probabilityMax\.blast_radius\.infra/);
 });

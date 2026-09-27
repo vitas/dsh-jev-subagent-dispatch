@@ -1,6 +1,6 @@
 {
   "name": "dsh-jev-subagent-dispatch",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Jev-guided subagent dispatch for DeepSeek Harness: classifies a task with a System One model and recommends which subagent model route should take the turn; the main agent performs the handoff",
   "license": "MIT",
   "type": "module",
@@ -10,6 +10,7 @@
     "config.mjs",
     "jev.mjs",
     "verdict.mjs",
+    "capabilities.mjs",
     "cordis.patch.yml",
     "README.md"
   ],

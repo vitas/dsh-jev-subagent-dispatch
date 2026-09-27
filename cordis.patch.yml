@@ -155,6 +155,9 @@
                 needs_repo_context: 0.5
                 user_explicit: 0.3
                 risky: 0.2
+              # probabilityMax: cap the probability of a severe level, not
+              # only the average score (questionId → { level: max }).
+              probabilityMax: {}
           careful:
             confidenceMin: 0.85
             delegate:

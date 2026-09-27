@@ -120,6 +120,11 @@ export const DEFAULT_PROFILES = {
       effortMax: 1.5,
       blastRadiusMax: 1.5,
       maxNoul: { needs_repo_context: 0.5, user_explicit: 0.3, risky: 0.2 },
+      // Cap the PROBABILITY of a severe outcome, not only the average score:
+      // a low average blast radius can still carry a meaningful chance of an
+      // infra-level result. Jev supplies per-level probabilities for score
+      // answers; this map is questionId → { levelName: maxProbability }.
+      probabilityMax: {},
     },
   },
   careful: {
@@ -316,6 +321,20 @@ export function validate(config) {
     for (const [noulId, ceiling] of Object.entries(del.maxNoul ?? {})) {
       if (!Number.isFinite(ceiling) || ceiling < 0 || ceiling > 1) {
         throw new Error(`${where}: profile "${name}" maxNoul.${noulId} must be in [0, 1]`);
+      }
+    }
+    const probMax = del.probabilityMax ?? {};
+    if (typeof probMax !== "object" || Array.isArray(probMax)) {
+      throw new Error(`${where}: profile "${name}" probabilityMax must be an object keyed by question id`);
+    }
+    for (const [questionId, limits] of Object.entries(probMax)) {
+      if (typeof limits !== "object" || limits === null || Object.keys(limits).length === 0) {
+        throw new Error(`${where}: profile "${name}" probabilityMax.${questionId} must map level names to probabilities`);
+      }
+      for (const [level, max] of Object.entries(limits)) {
+        if (!Number.isFinite(max) || max < 0 || max > 1) {
+          throw new Error(`${where}: profile "${name}" probabilityMax.${questionId}.${level} must be in [0, 1]`);
+        }
       }
     }
   }

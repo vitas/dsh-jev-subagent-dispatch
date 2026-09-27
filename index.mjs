@@ -32,8 +32,8 @@
  * @module dsh-jev-subagent-dispatch
  */
 
+import { randomUUID } from "node:crypto";
 import { appendFile, mkdir } from "node:fs/promises";
-import { homedir } from "node:os";
 import { join } from "node:path";
 import { PLUGIN_NAME, PLUGIN_SOURCE_KIND, resolveConfig } from "./config.mjs";
 import { checkDispatchCapabilities, routeAdviceFor } from "./capabilities.mjs";
@@ -171,9 +171,36 @@ export function apply(ctx, input = {}, deps = {}) {
         outcome = { action: "error", reason: String(error?.message ?? error) };
       }
 
+      // Build the injection BEFORE logging so the record can tell delivery
+      // from mere policy: `action` is what Jev decided, `delivered` is
+      // whether the recommendation actually reached the turn. What the log
+      // still cannot see is whether the main agent followed the advice —
+      // that is the routing ledger's job (see README).
+      let addition = null;
+      if (outcome.action === "delegate") {
+        logger.info?.(`jev-subagent-dispatch: recommend → ${outcome.role} (${outcome.route.provider}/${outcome.route.model}), confidence ${outcome.confidence.toFixed(2)}`);
+        // The named route is only rendered when the session's model-selection
+        // policy allows it AND the visible tool can follow it; otherwise the
+        // recommendation defers to the child default or the session
+        // allowlist. Re-read at request time.
+        const routeAdvice = routeAdviceFor(capabilities.routePolicy, outcome.route, capabilities.routePolicy === "named"
+          ? services.sessionProjections?.stateOf?.(agent?.session, "subagentModelSelectionPolicy")
+          : undefined, capabilities.toolName);
+        addition = await buildMessage(renderVerdictMessage(outcome, config, { preview: trigger?.action === "preview", routeAdvice }));
+      } else if (outcome.action === "skip" && trigger?.action === "preview") {
+        // Preview exists to inspect the cases you cannot see otherwise —
+        // misses included: render the skip verdict with its answers.
+        addition = await buildMessage(renderVerdictMessage(outcome, config, { preview: true }));
+      }
+      if (addition === null && outcome.action === "delegate" && !warnedNoFactory) {
+        warnedNoFactory = true;
+        logger.warn?.("jev-subagent-dispatch: @deepseek-ai/dsh-llm is unavailable; skipping injection instead of fabricating a message");
+      }
+
       if (logDir !== null) {
         await logVerdict(logDir, {
           at: new Date().toISOString(),
+          id: randomUUID(),
           session: agent?.session?.id ?? null,
           mode: config.mode,
           trigger: trigger?.action ?? null,
@@ -181,6 +208,7 @@ export function apply(ctx, input = {}, deps = {}) {
           action: outcome.action,
           reason: outcome.reason ?? null,
           confidence: outcome.confidence ?? null,
+          ...(outcome.action === "delegate" ? { delivered: addition !== null } : {}),
           route: outcome.route ?? null,
           role: outcome.role ?? null,
           model: outcome.model ?? null,
@@ -190,26 +218,11 @@ export function apply(ctx, input = {}, deps = {}) {
         }, logger);
       }
 
+      if (addition !== null) return { ...decision, messages: [...decision.messages, addition] };
       if (outcome.action !== "delegate") {
         logger.info?.(`jev-subagent-dispatch: skip — ${outcome.reason}`);
-        return decision;
       }
-      logger.info?.(`jev-subagent-dispatch: recommend → ${outcome.role} (${outcome.route.provider}/${outcome.route.model}), confidence ${outcome.confidence.toFixed(2)}`);
-      // The named route is only rendered when the session's model-selection
-      // policy allows it; otherwise the recommendation defers to the child
-      // default or the session allowlist. Re-read at request time.
-      const routeAdvice = routeAdviceFor(capabilities.routePolicy, outcome.route, capabilities.routePolicy === "named"
-        ? services.sessionProjections?.stateOf?.(agent?.session, "subagentModelSelectionPolicy")
-        : undefined);
-      const addition = await buildMessage(renderVerdictMessage(outcome, config, { preview: trigger?.action === "preview", routeAdvice }));
-      if (addition === null) {
-        if (!warnedNoFactory) {
-          warnedNoFactory = true;
-          logger.warn?.("jev-subagent-dispatch: @deepseek-ai/dsh-llm is unavailable; skipping injection instead of fabricating a message");
-        }
-        return decision;
-      }
-      return { ...decision, messages: [...decision.messages, addition] };
+      return decision;
     } catch (error) {
       logger.warn?.(`jev-subagent-dispatch: unexpected failure, turn proceeds unrouted — ${String(error)}`);
       return decision;

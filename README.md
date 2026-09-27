@@ -15,7 +15,8 @@ For a dispatch plugin, calling Jev before knowing whether the agent can delegate
 - a delegation tool (`subagent` / `subagent_fork`) is visible to **this** agent;
 - the subagent service is present and the provider behind the visible tool is registered;
 - the agent has remaining delegation depth (`session.header.delegationDepth` against the effective depth limit — provider-managed limits always leave room locally);
-- the session's model-selection policy (`subagentModelSelectionPolicy` projection): when model selection is **off**, the subagent tool takes no model argument and the recommendation names no model — the session's configured child default applies; when it is **on**, a configured route is named only if the session allowlist contains it, otherwise the message points the agent at `list_subagent_models`.
+- the session's model-selection policy (`subagentModelSelectionPolicy` projection): when model selection is **off**, the subagent tool takes no model argument and the recommendation names no model — the session's configured child default applies; when it is **on**, a configured route is named only if the session allowlist contains it, otherwise the message points the agent at `list_subagent_models`;
+- **which tool** was found: a fork-only setup never sees a named model, because `subagent_fork` is fixed-route by design — the fork inherits the parent's model and context, so the advice renders as "the fork inherits your model and context". A model name is only ever advice the visible tool can follow.
 
 | Situation | Explicit `/route` request | Ordinary turn (`auto`) |
 |---|---|---|
@@ -44,7 +45,7 @@ Trigger syntax (configurable via `triggers`):
 
 A request may **name the decision**: the text after the trigger leads the state sent to Jev (`/jev which specialist?` becomes a decision request the typed rubric answers through its vocabulary). This makes Jev a small decision service the agent can reuse, while the routing policy remains one specific use of it.
 
-**Preview** — `/route preview <task>` classifies and injects an evaluation-only verdict: full answers (including noul probabilities), an explicit "do not delegate based on this", and a `trigger: preview` mark in the verdict log. Collect real examples this way and read them against actual outcomes before allowing automatic delegation.
+**Preview** — `/route preview <task>` classifies and injects an evaluation-only verdict: full answers (including noul probabilities), an explicit "do not delegate based on this", and a `trigger: preview` mark in the verdict log. Misses are rendered too: a verdict the policy declines injects `verdict: skip — <reason>` with its answers, because the skipped cases are exactly the ones you cannot see any other way. Collect real examples this way and read them against actual outcomes before allowing automatic delegation.
 
 Roadmap, in the order the evidence would justify it: an agent-called `route_task` tool (the main agent asks when unsure — natural in conversation, but it still spends a step deciding to call), and selective auto (cheap local rules first, Jev only for turns whose route stays unclear — needs collected data to tune the trigger).
 
@@ -110,6 +111,9 @@ profiles:
         needs_repo_context: 0.5
         user_explicit: 0.3
         risky: 0.2
+      # cap the probability of a severe level, not only the average score:
+      probabilityMax:
+        blast_radius: { infra: 0.1, catastrophic: 0.02 }
 routeFor:
   mechanical: implementer
   bugfix: implementer
@@ -193,11 +197,13 @@ The recalibration loop: when tests fail or work needs redoing after a delegation
 
 The recommendation costs one classification call per turn; it should earn its place with evidence, not faith. The verdict log plus `usage` gives you the inputs:
 
-- **delegation rate** — share of turns ending in a `delegate` verdict, and how many of those the main agent actually followed (log with `logTurnText` on for a week and compare against transcripts);
+- **verdict rate** — share of turns ending in a `delegate` verdict. Every record carries an `id` and a `delivered` flag (whether the recommendation was actually injected — a missing message factory makes a verdict undelivered);
 - **latency and cost** — `latencyMs` and `usage.input_tokens` per verdict against the main model's tokens saved on mechanical turns;
 - **rework** — count test failures and re-delegations after routed turns versus unrouted ones (toggle `enabled` off for a comparable baseline period).
 
 If the deltas do not justify the extra call, tighten the policy so it fires less often — a quiet router is a good router.
+
+Be honest about the gap: today's log measures **policy verdicts and delivery**, not adoption — it cannot see whether the main agent actually spawned a child, which model ran, or whether the work was re-done. The next step is a closed-loop **routing ledger**: correlate each verdict `id` with the actual subagent call, elapsed time, and rework, then report follow-rate and time-saved by task class. Observe first; retune thresholds on that evidence, not on intuition.
 
 ## Testing
 

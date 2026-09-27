@@ -108,6 +108,10 @@ export function findTrigger(messages, config) {
       const lower = text.toLowerCase();
       const token = trigger.toLowerCase();
       if (!lower.startsWith(token)) continue;
+      // Word boundary: "/router" is not "/route". The next character must
+      // be whitespace, punctuation, or end-of-line — never a word character.
+      const after = text[trigger.length];
+      if (after !== undefined && /[A-Za-z0-9_-]/.test(after)) continue;
       let rest = text.slice(trigger.length).trim();
       let action = "route";
       if (rest.toLowerCase().startsWith("preview")) {
@@ -161,6 +165,24 @@ export function predicateHolds(answers, delegate, questions) {
       return { pass: false, reason: `${id} ${probability.toFixed(2)} > ${ceiling}` };
     }
   }
+  // Per-level probability ceilings: the average score can look safe while a
+  // severe level still carries real mass. Fails closed when the model did not
+  // supply usable per-level probabilities.
+  for (const [id, limits] of Object.entries(delegate.probabilityMax ?? {})) {
+    const probabilities = answers[id]?.probabilities;
+    if (probabilities === null || typeof probabilities !== "object") {
+      return { pass: false, reason: `${id} probabilities missing` };
+    }
+    for (const [level, max] of Object.entries(limits)) {
+      const probability = probabilities[level];
+      if (!Number.isFinite(probability)) {
+        return { pass: false, reason: `${id} probability for ${level} missing` };
+      }
+      if (probability > max) {
+        return { pass: false, reason: `${id} P(${level}) ${probability.toFixed(2)} > ${max}` };
+      }
+    }
+  }
   return { pass: true, reason: "predicate holds" };
 }
 
@@ -187,6 +209,7 @@ export function decide({ answers, model, usage, latencyMs }, config) {
       action: "skip",
       reason: `confidence ${primaryConfidence.toFixed(2)} < ${floor}`,
       confidence: primaryConfidence,
+      answers,
       model,
       usage,
       latencyMs,
@@ -194,7 +217,7 @@ export function decide({ answers, model, usage, latencyMs }, config) {
   }
   const check = predicateHolds(answers, profile.delegate, config.questions);
   if (!check.pass) {
-    return { action: "skip", reason: check.reason, confidence: primaryConfidence, model, usage, latencyMs };
+    return { action: "skip", reason: check.reason, confidence: primaryConfidence, answers, model, usage, latencyMs };
   }
   const classLabel = String(taskClassAnswer?.value ?? "").toLowerCase();
   const role = config.routeFor[classLabel] ?? config.defaultRoute;
@@ -204,6 +227,7 @@ export function decide({ answers, model, usage, latencyMs }, config) {
       action: "skip",
       reason: `no route for role "${role}"`,
       confidence: primaryConfidence,
+      answers,
       model,
       usage,
       latencyMs,
@@ -248,6 +272,28 @@ function scoreLabel(config, id, value) {
  */
 export function renderVerdictMessage(decision, config, { preview = false, routeAdvice = { kind: "named", route: decision.route } } = {}) {
   const { answers, role, confidence } = decision;
+  if (decision.action === "skip") {
+    // Reachable only in preview mode: show the miss WITH its answers so the
+    // verdict log and the preview explain why the policy declined.
+    const effort = answers.effort !== undefined
+      ? `${scoreLabel(config, "effort", answers.effort.value)} (${answers.effort.value})`
+      : "n/a";
+    const blast = answers.blast_radius !== undefined
+      ? `${scoreLabel(config, "blast_radius", answers.blast_radius.value)} (${answers.blast_radius.value})`
+      : "n/a";
+    const taskClass = String(answers.task_class?.value ?? "unknown");
+    const lines = [
+      "[jev-subagent-dispatch] PREVIEW — evaluation only: this is a System One verdict for the verdict log, NOT a routing instruction. Do not delegate based on it.",
+      `- verdict: skip — ${decision.reason ?? "policy declined"}`,
+      `- class: ${taskClass} (confidence ${Number(decision.confidence ?? 0).toFixed(2)}, effort ${effort}, blast radius ${blast})`,
+    ];
+    const noul = Object.entries(answers)
+      .filter(([id, answer]) => config.questions?.[id]?.type === "noul" && Number.isFinite(answer?.value))
+      .map(([id, answer]) => `${id}=${answer.value.toFixed(2)}`)
+      .join(", ");
+    if (noul.length > 0) lines.push(`- noul: ${noul}`);
+    return lines.join("\n");
+  }
   const effort = answers.effort !== undefined
     ? `${scoreLabel(config, "effort", answers.effort.value)} (${answers.effort.value})`
     : "n/a";
@@ -273,6 +319,10 @@ export function renderVerdictMessage(decision, config, { preview = false, routeA
   if (routeAdvice.kind === "named") {
     const { provider, model } = routeAdvice.route;
     lines.push(`- recommended route: subagent role "${role}" → provider ${provider}, model ${model}`);
+  } else if (routeAdvice.kind === "fork") {
+    // subagent_fork is fixed-route by design: it omits model selection, so
+    // naming a model here would be advice the tool cannot follow.
+    lines.push(`- recommended route: subagent_fork → the fork inherits your model and context (fixed-route; model selection does not apply)`);
   } else if (routeAdvice.kind === "child-default") {
     lines.push(`- recommended route: subagent role "${role}" → the session's configured child default (model selection is off; the model is not chosen here)`);
   } else {

@@ -101,10 +101,15 @@ export function checkDispatchCapabilities(services, agent) {
  * @param routePolicy - from {@link checkDispatchCapabilities}.
  * @param route - the configured route `{ provider, model }` for the role.
  * @param policyRoutes - the session allowlist when `routePolicy` is `"named"`.
- * @returns `{ kind: "named", route } | { kind: "child-default" } |
- *   { kind: "allowlist", route }`.
+ * @param toolName - the delegation tool found visible (see
+ *   {@link checkDispatchCapabilities}); `subagent_fork` is fixed-route by
+ *   design — it omits model selection, so no model may be named even when
+ *   the session allowlist would allow one.
+ * @returns `{ kind: "named", route } | { kind: "fork" } |
+ *   { kind: "child-default" } | { kind: "allowlist", route }`.
  */
-export function routeAdviceFor(routePolicy, route, policyRoutes) {
+export function routeAdviceFor(routePolicy, route, policyRoutes, toolName) {
+  if (toolName === "subagent_fork") return { kind: "fork" };
   if (routePolicy === "named") {
     const allowed = Array.isArray(policyRoutes)
       && policyRoutes.some((candidate) => candidate?.provider === route?.provider && candidate?.model === route?.model);
