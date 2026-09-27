@@ -157,8 +157,35 @@ function pickAnswer(question, answer) {
  * option/level name; an ordered array is mapped onto criteria order.
  */
 function normalizeProbabilities(question, probabilities) {
+  // Score responses key probabilities by POSITION — an ordered array, or an
+  // object keyed by stringified indices ("0", "4"). Policies speak rubric
+  // names ("infra"), so translate positions onto the configured level names;
+  // unknown keys pass through unchanged.
+  if (question.type === "score") {
+    const names = (Array.isArray(question.criteria) ? question.criteria : []).map((entry) => String(entry).split(" — ")[0].trim());
+    if (Array.isArray(probabilities)) {
+      const out = {};
+      names.forEach((name, index) => {
+        out[name] = clamp01(numberOr(probabilities[index], 0));
+      });
+      return out;
+    }
+    if (probabilities && typeof probabilities === "object") {
+      const out = {};
+      for (const [key, value] of Object.entries(probabilities)) {
+        if (!Number.isFinite(value)) continue;
+        const position = Number.parseInt(key, 10);
+        const name = String(Number.isInteger(position) && String(position) === key && position >= 0 && position < names.length ? names[position] : key);
+        out[name] = clamp01(value);
+      }
+      // a level absent from the response carries no mass
+      for (const name of names) out[name] ??= 0;
+      return out;
+    }
+    return null;
+  }
   if (Array.isArray(probabilities)) {
-    const keys = question.type === "choice" ? Object.keys(question.criteria) : question.criteria.map((_, index) => String(index));
+    const keys = Object.keys(question.criteria);
     const out = {};
     keys.forEach((key, index) => {
       out[key] = clamp01(numberOr(probabilities[index], 0));

@@ -45,7 +45,7 @@ Trigger syntax (configurable via `triggers`):
 
 A request may **name the decision**: the text after the trigger leads the state sent to Jev (`/jev which specialist?` becomes a decision request the typed rubric answers through its vocabulary). This makes Jev a small decision service the agent can reuse, while the routing policy remains one specific use of it.
 
-**Preview** — `/route preview <task>` classifies and injects an evaluation-only verdict: full answers (including noul probabilities), an explicit "do not delegate based on this", and a `trigger: preview` mark in the verdict log. Misses are rendered too: a verdict the policy declines injects `verdict: skip — <reason>` with its answers, because the skipped cases are exactly the ones you cannot see any other way. Collect real examples this way and read them against actual outcomes before allowing automatic delegation.
+**Preview** — `/route preview <task>` classifies and injects an evaluation-only verdict: full answers — including score distributions (`blast_radius distribution: trivial 0.20, …`) so the risk policy can be tuned against real mass — an explicit "do not delegate based on this", and a `trigger: preview` mark in the verdict log. Misses are rendered too: a verdict the policy declines injects `verdict: skip — <reason>` with its answers, because the skipped cases are exactly the ones you cannot see any other way. Collect real examples this way and read them against actual outcomes before allowing automatic delegation.
 
 Roadmap, in the order the evidence would justify it: an agent-called `route_task` tool (the main agent asks when unsure — natural in conversation, but it still spends a step deciding to call), and selective auto (cheap local rules first, Jev only for turns whose route stays unclear — needs collected data to tune the trigger).
 
@@ -75,7 +75,7 @@ Fail-open everywhere: a missing key, a timeout, a 429, or a broken config logs t
 The state sent to TypeSafe is deliberately minimal and is **redacted before it leaves the machine**:
 
 - the user's turn text plus a `workspace:` line — no diffs, no tool output, no file contents;
-- capped to `stateChars` (default 1200) from the head;
+- the **assembled** state is redacted as a whole (the workspace path travels through the same credential filters as the task text) and only then capped to `stateChars` (default 1200), so a long path can neither leak nor push the task text out of the payload;
 - credential-shaped substrings (`sk-…`, `ghp_…`, `github_pat_…`, `AKIA…`, `Bearer …`, `api_key=…`, long base64 tokens) are replaced with `[redacted]` by built-in patterns; `redactPatterns` adds your own regex sources;
 - logging is **opt-in** (`logDir`), and the user's turn text reaches the log only when `logTurnText` is true — the verdict itself (class, scores, probabilities, route, usage) is what you calibrate against.
 
@@ -111,9 +111,10 @@ profiles:
         needs_repo_context: 0.5
         user_explicit: 0.3
         risky: 0.2
-      # cap the probability of a severe level, not only the average score:
+      # cap the probability of a severe level, not only the average score;
+      # levels are rubric names, "name+" sums that level and everything worse
       probabilityMax:
-        blast_radius: { infra: 0.1, catastrophic: 0.02 }
+        blast_radius: { "public_api+": 0.15, infra: 0.05 }
 routeFor:
   mechanical: implementer
   bugfix: implementer
@@ -180,6 +181,7 @@ All settings live in the plugin row's `config`. The bundle patch ships the docum
 | `logDir` | `null` | NDJSON verdict sink; **`null` or `""` disables logging**; set a directory path to opt in |
 | `logTurnText` | `false` | when logging is on, include the (redacted) turn text in the log |
 | `includeFallbackLine` | `true` | add the "proceed yourself if subagents are unavailable" line |
+| `delegationTools` | `subagent`, `subagent_fork` | `{ toolName, provider }` pairs the capability gate probes; a preset that configures a custom `toolName` must list it here, or dispatch reports itself unavailable |
 
 ## Observability and recalibration
 
@@ -204,6 +206,27 @@ The recommendation costs one classification call per turn; it should earn its pl
 If the deltas do not justify the extra call, tighten the policy so it fires less often — a quiet router is a good router.
 
 Be honest about the gap: today's log measures **policy verdicts and delivery**, not adoption — it cannot see whether the main agent actually spawned a child, which model ran, or whether the work was re-done. The next step is a closed-loop **routing ledger**: correlate each verdict `id` with the actual subagent call, elapsed time, and rework, then report follow-rate and time-saved by task class. Observe first; retune thresholds on that evidence, not on intuition.
+
+### Replaying policy changes offline
+
+You do not need more Jev calls to evaluate a candidate policy — the verdict log already stores every answer set. Replay re-decides the recorded answers locally and shows what would flip, grouped by task class and reason:
+
+```sh
+npx jev-replay ~/.dsh/verdicts/verdicts.ndjson candidate.json
+# candidate.json — plugin-input overrides, e.g.
+# { "profiles": { "auto": { "delegate": { "effortMax": 1, "probabilityMax": { "blast_radius": { "public_api+": 0.1 } } } } } }
+```
+
+```text
+[jev-subagent-dispatch] replay: 42 judged, 35 unchanged, 7 would flip
+flips by task class:
+  5  research
+  2  mechanical
+flips by reason:
+  7  effort 1.4 > effortMax
+```
+
+Add `--json` for machine-readable output. Replay keeps decisions reviewable: you see exactly which historical turns a threshold change would have flipped before you commit it. The planned routing ledger (correlating verdict `id`s with actual child calls and rework) will let replay compare policy changes against observed outcomes too.
 
 ## Testing
 

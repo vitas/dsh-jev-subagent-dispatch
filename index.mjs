@@ -136,7 +136,7 @@ export function apply(ctx, input = {}, deps = {}) {
         subagents: ctx.get("subagents"),
         sessionProjections: ctx.get("sessionProjections"),
       };
-      const capabilities = checkDispatchCapabilities(services, agent);
+      const capabilities = checkDispatchCapabilities(services, agent, config.delegationTools);
       if (!capabilities.ok) {
         // Ordinary turns stay completely silent — no injection, no call, no
         // log spam. Only an explicit request gets a diagnostic (and a log

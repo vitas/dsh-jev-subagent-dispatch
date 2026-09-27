@@ -9,7 +9,7 @@
  * @module dsh-jev-subagent-dispatch/verdict
  */
 
-import { BUILT_IN_REDACT_PATTERNS } from "./config.mjs";
+import { BUILT_IN_REDACT_PATTERNS, criteriaLevelNames } from "./config.mjs";
 
 /** Compiled credential-shaped patterns applied to every outbound state. */
 const REDACT_RES = BUILT_IN_REDACT_PATTERNS.map((source) => new RegExp(source, "gi"));
@@ -76,18 +76,23 @@ export function isPlainUserMessage(message) {
  * @param explicitTask - the decision request text after a trigger, if any.
  * @returns the state string, or "" when there is nothing to classify.
  */
+const numberOr = (value, fallback) => (Number.isFinite(value) ? value : fallback);
+
 export function buildState(messages, cwd, stateChars, extraRedactPatterns = [], explicitTask = "") {
   const turns = (messages ?? [])
     .filter((message) => isPlainUserMessage(message))
-    .map((message) => redact(messageText(message).trim(), extraRedactPatterns))
+    .map((message) => messageText(message).trim())
     .filter((text) => text.length > 0);
-  const task = redact(String(explicitTask ?? "").trim(), extraRedactPatterns);
+  const task = String(explicitTask ?? "").trim();
   const bodyParts = task.length > 0 ? [task, ...turns] : turns;
   if (bodyParts.length === 0) return "";
-  const body = bodyParts.join("\n---\n");
   const prefix = `workspace: ${cwd}\ntask:\n`;
-  const budget = Math.max(0, stateChars - prefix.length);
-  return prefix + (body.length > budget ? body.slice(0, budget) : body);
+  // Redact the COMPLETE assembled state — the workspace path travels through
+  // the same credential filters as the task text — and apply the final cap to
+  // the whole result, so a long path cannot exceed stateChars or push the
+  // task text out of the payload. The explicit task still leads.
+  const state = redact(`${prefix}${bodyParts.join("\n---\n")}`, extraRedactPatterns);
+  return state.length > stateChars ? state.slice(0, Math.max(0, stateChars)) : state;
 }
 
 /**
@@ -166,20 +171,30 @@ export function predicateHolds(answers, delegate, questions) {
     }
   }
   // Per-level probability ceilings: the average score can look safe while a
-  // severe level still carries real mass. Fails closed when the model did not
-  // supply usable per-level probabilities.
+  // severe level still carries real mass. Levels are rubric names ("infra"),
+  // tail sums ("public_api+" = that level or worse), or numeric indices;
+  // numeric positions from the response were translated onto rubric names at
+  // normalization time. Fails closed without usable probabilities.
   for (const [id, limits] of Object.entries(delegate.probabilityMax ?? {})) {
     const probabilities = answers[id]?.probabilities;
+    const names = criteriaLevelNames(questions?.[id]);
     if (probabilities === null || typeof probabilities !== "object") {
       return { pass: false, reason: `${id} probabilities missing` };
     }
-    for (const [level, max] of Object.entries(limits)) {
-      const probability = probabilities[level];
-      if (!Number.isFinite(probability)) {
-        return { pass: false, reason: `${id} probability for ${level} missing` };
+    for (const [rawLevel, max] of Object.entries(limits)) {
+      const tail = rawLevel.endsWith("+");
+      const level = tail ? rawLevel.slice(0, -1) : rawLevel;
+      const index = /^\d+$/.test(level) ? Number(level) : names.indexOf(level);
+      if (index === -1 || index >= names.length) {
+        return { pass: false, reason: `${id} level "${level}" is not in the rubric` };
       }
-      if (probability > max) {
-        return { pass: false, reason: `${id} P(${level}) ${probability.toFixed(2)} > ${max}` };
+      const levels = tail ? names.slice(index) : [names[index]];
+      const mass = levels.reduce(
+        (sum, name, offset) => sum + numberOr(probabilities[name], numberOr(probabilities[String(tail ? index + offset : index)], 0)),
+        0,
+      );
+      if (mass > max) {
+        return { pass: false, reason: `${id} P(${rawLevel}) ${mass.toFixed(2)} > ${max}` };
       }
     }
   }
@@ -261,6 +276,21 @@ function scoreLabel(config, id, value) {
 }
 
 /**
+ * Format one score answer's per-level probabilities as "name 0.42, ..."
+ * — the tail risk a probabilityMax policy gates on. Null for answers
+ * without usable distributions.
+ * @param answer - a normalized score answer with `probabilities`.
+ * @returns the distribution text, or null.
+ */
+function distributionLine(answer) {
+  const probabilities = answer?.probabilities;
+  if (probabilities === null || typeof probabilities !== "object") return null;
+  const entries = Object.entries(probabilities);
+  if (entries.length === 0) return null;
+  return entries.map(([name, value]) => `${name} ${Number(value).toFixed(2)}`).join(", ");
+}
+
+/**
  * Render the injected user message. English on purpose: it instructs the
  * agent, not the user, and the agent's instructions are English.
  * @param decision - a `"delegate"` decision from {@link decide}.
@@ -292,6 +322,10 @@ export function renderVerdictMessage(decision, config, { preview = false, routeA
       .map(([id, answer]) => `${id}=${answer.value.toFixed(2)}`)
       .join(", ");
     if (noul.length > 0) lines.push(`- noul: ${noul}`);
+    for (const [id, answer] of Object.entries(answers)) {
+      const distribution = distributionLine(answer);
+      if (distribution !== null) lines.push(`- ${id} distribution: ${distribution}`);
+    }
     return lines.join("\n");
   }
   const effort = answers.effort !== undefined
@@ -316,6 +350,12 @@ export function renderVerdictMessage(decision, config, { preview = false, routeA
     `- class: ${taskClass} (confidence ${confidence.toFixed(2)}, effort ${effort}, blast radius ${blast})`,
   );
   if (noul.length > 0) lines.push(`- noul: ${noul}`);
+  if (preview) {
+    for (const [id, answer] of Object.entries(answers)) {
+      const distribution = distributionLine(answer);
+      if (distribution !== null) lines.push(`- ${id} distribution: ${distribution}`);
+    }
+  }
   if (routeAdvice.kind === "named") {
     const { provider, model } = routeAdvice.route;
     lines.push(`- recommended route: subagent role "${role}" → provider ${provider}, model ${model}`);

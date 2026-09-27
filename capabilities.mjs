@@ -18,7 +18,7 @@
  * @module dsh-jev-subagent-dispatch/capabilities
  */
 
-/** The delegation tools DSH composes, and the subagent provider behind each. */
+/** The delegation tools DSH composes by default, and the provider behind each. */
 export const DELEGATION_TOOLS = [
   { toolName: "subagent", provider: "spawn" },
   { toolName: "subagent_fork", provider: "fork" },
@@ -49,16 +49,19 @@ function tryCall(fn) {
  * @param services - `{ tools, subagents, sessionProjections }` as resolved
  *   from the host at request time (each may be undefined).
  * @param agent - the agent asking for the routing verdict.
+ * @param delegationTools - the `{ toolName, provider }` list to probe, from
+ *   `config.delegationTools` (a preset may configure a custom toolName, so
+ *   the defaults alone would report a working custom setup unavailable).
  * @returns `{ ok, missing, routePolicy, toolName }` where `routePolicy` is
  *   `"named"` (allowlist present — a named route may be checked against it),
  *   `"fixed"` (model selection off — recommend the child default without
  *   naming a model), or `"unknown"` (policy unreadable).
  */
-export function checkDispatchCapabilities(services, agent) {
+export function checkDispatchCapabilities(services, agent, delegationTools = DELEGATION_TOOLS) {
   const { tools, subagents, sessionProjections } = services ?? {};
   const missing = [];
 
-  const visible = DELEGATION_TOOLS.filter(({ toolName }) => (
+  const visible = (delegationTools ?? DELEGATION_TOOLS).filter(({ toolName }) => (
     tools?.get !== undefined && tryCall(() => tools.get(toolName, agent)) !== undefined
   ));
   if (visible.length === 0) {

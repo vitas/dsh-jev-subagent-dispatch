@@ -773,3 +773,103 @@ test("policy: per-level probability ceilings gate the tail risk", () => {
   assert.match(blockedMissing.reason, /probabilities missing/);
   assert.throws(() => resolveConfig({ profiles: { auto: { delegate: { probabilityMax: { blast_radius: { infra: 1.5 } } } } } }), /probabilityMax\.blast_radius\.infra/);
 });
+
+test("policy: score probabilities are normalized onto rubric names", () => {
+  const normalized = normalizeAnswers(documentedAnswers(), config.questions);
+  // documentedAnswers carries blast_radius probabilities as an ordered array;
+  // the rubric names must key the normalized distribution.
+  assert.deepEqual(
+    Object.keys(normalized.blast_radius.probabilities),
+    ["trivial", "module", "cross_module", "public_api", "infra"],
+  );
+  // Real responses may key positions by stringified indices ("4").
+  const positional = normalizeAnswers({
+    answers: { ...documentedAnswers().answers, blast_radius: { type: "score", score: 1, probabilities: { "0": 0.5, "1": 0.5 }, confidence: 0.9 } },
+  }, config.questions);
+  assert.deepEqual(positional.blast_radius.probabilities, { trivial: 0.5, module: 0.5, cross_module: 0, public_api: 0, infra: 0 });
+});
+
+test("policy: probabilityMax speaks rubric names, not indices", () => {
+  const base = normalizeAnswers(documentedAnswers(), config.questions);
+  // infra is the last rubric level: array position 4 carried 0.01.
+  const gated = (max) => ({
+    ...config,
+    profiles: { ...config.profiles, auto: { ...config.profiles.auto, delegate: { ...config.profiles.auto.delegate, probabilityMax: { blast_radius: { infra: max } } } } },
+  });
+  assert.equal(decide({ answers: base, model: "m" }, gated(0.02)).action, "delegate");
+  const blocked = decide({ answers: base, model: "m" }, gated(0.005));
+  assert.equal(blocked.action, "skip");
+  assert.match(blocked.reason, /P\(infra\) 0\.01 > 0\.005/);
+  // numeric indices remain accepted as LEVEL names for operators reading
+  // raw responses (index 4 = infra, ceiling 0.005)
+  const byIndex = {
+    ...config,
+    profiles: { ...config.profiles, auto: { ...config.profiles.auto, delegate: { ...config.profiles.auto.delegate, probabilityMax: { blast_radius: { "4": 0.005 } } } } },
+  };
+  assert.equal(decide({ answers: base, model: "m" }, byIndex).action, "skip");
+});
+
+test("policy: a tail limit sums a level and everything worse", () => {
+  const base = normalizeAnswers(documentedAnswers(), config.questions);
+  const gated = (max) => ({
+    ...config,
+    profiles: { ...config.profiles, auto: { ...config.profiles.auto, delegate: { ...config.profiles.auto.delegate, probabilityMax: { blast_radius: { "public_api+": max } } } } },
+  });
+  // from public_api up: public_api 0.04 + infra 0.01 = 0.05 — the combined
+  // tail that separate per-level caps could each let through
+  const blocked = decide({ answers: base, model: "m" }, gated(0.04));
+  assert.equal(blocked.action, "skip");
+  assert.match(blocked.reason, /P\(public_api\+\) 0\.05 > 0\.04/);
+  assert.equal(decide({ answers: base, model: "m" }, gated(0.05)).action, "delegate");
+});
+
+test("config: probabilityMax levels are validated against the rubric", () => {
+  assert.throws(
+    () => resolveConfig({ profiles: { auto: { delegate: { probabilityMax: { blast_radius: { catastrophic: 0.02 } } } } } }),
+    /probabilityMax\.blast_radius\.catastrophic is not in the rubric \(trivial\|module\|cross_module\|public_api\|infra\)/,
+  );
+  assert.throws(
+    () => resolveConfig({ profiles: { auto: { delegate: { probabilityMax: { needs_repo_context: { high: 0.1 } } } } } }),
+    /names no configured score question/,
+  );
+  assert.doesNotThrow(() => resolveConfig({ profiles: { auto: { delegate: { probabilityMax: { blast_radius: { "public_api+": 0.2, infra: 0.05 } } } } } }));
+});
+
+test("verdict: the assembled state is redacted and capped as a whole", () => {
+  const messages = [{ role: "user", content: [{ type: "text", text: "rename foo" }] }];
+  // a credential-shaped path must not leak through the prefix
+  const leaked = buildState(messages, "/home/dev/sk-abcdefghijklmnop1234/repo", 2000);
+  assert.doesNotMatch(leaked, /sk-abcdefghijklmnop/);
+  assert.match(leaked, /\[redacted\]/);
+  // a long path can no longer push the task text out: the cap covers the
+  // assembled state, so the tail (not the task) is what gets truncated last
+  const longPath = `/${"very-long-segment/".repeat(40)}`;
+  const capped = buildState(messages, longPath, 120);
+  assert.ok(capped.length <= 120);
+  const full = buildState(messages, longPath, 4000);
+  assert.match(full, /rename foo/);
+});
+
+test("preview: score distributions are rendered for tuning", () => {
+  const normalized = normalizeAnswers(documentedAnswers(), config.questions);
+  const decision = decide({ answers: normalized, model: "m" }, config);
+  const text = renderVerdictMessage(decision, config, { preview: true });
+  assert.match(text, /blast_radius distribution: trivial 0\.20, module 0\.60, cross_module 0\.15, public_api 0\.04, infra 0\.01/);
+  assert.doesNotMatch(renderVerdictMessage(decision, config, { routeAdvice: { kind: "named", route: decision.route } }), /distribution:/);
+  const tight = { ...config, profiles: { ...config.profiles, auto: { ...config.profiles.auto, delegate: { ...config.profiles.auto.delegate, effortMax: 0.5 } } } };
+  const skip = decide({ answers: normalized, model: "m" }, tight);
+  assert.match(renderVerdictMessage(skip, config, { preview: true }), /effort distribution:/);
+});
+
+test("capabilities: configured custom tool names are probed too", () => {
+  const custom = {
+    tools: { get: (name) => (name === "delegate_task" ? { name } : undefined) },
+    subagents: { getProvider: (name) => ({ name }), resolveMaxDepth: () => 8 },
+  };
+  // defaults only probe subagent/subagent_fork: a working custom setup looks unavailable
+  assert.equal(checkDispatchCapabilities(custom, { session: {} }).ok, false);
+  const check = checkDispatchCapabilities(custom, { session: {} }, [{ toolName: "delegate_task", provider: "spawn" }]);
+  assert.equal(check.ok, true);
+  assert.equal(check.toolName, "delegate_task");
+  assert.throws(() => resolveConfig({ delegationTools: [{ toolName: "", provider: "spawn" }] }), /delegationTools/);
+});

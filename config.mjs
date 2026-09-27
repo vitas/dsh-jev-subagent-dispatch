@@ -112,6 +112,31 @@ export const DEFAULT_QUESTIONS = {
   },
 };
 
+/**
+ * Rubric level names for a question, in order: for score questions the part
+ * of each criteria entry before the " — " description separator; for choice
+ * questions the criteria keys; noul has no levels.
+ * @param question - a configured question definition.
+ * @returns the ordered level names (empty for noul).
+ */
+export function criteriaLevelNames(question) {
+  if (!question || question.type === "noul") return [];
+  if (question.type === "choice") return Object.keys(question.criteria ?? {});
+  return (Array.isArray(question.criteria) ? question.criteria : [])
+    .map((entry) => String(entry).split(" — ")[0].trim());
+}
+
+/**
+ * The delegation tools DSH composes by default, and the subagent provider
+ * behind each. A preset that configures a custom `toolName` (the harness
+ * permits it) must override this list, or the capability check cannot see
+ * the working tool.
+ */
+export const DEFAULT_DELEGATION_TOOLS = [
+  { toolName: "subagent", provider: "spawn" },
+  { toolName: "subagent_fork", provider: "fork" },
+];
+
 export const DEFAULT_PROFILES = {
   auto: {
     confidenceMin: 0.7,
@@ -214,6 +239,7 @@ export function defaults() {
     // user's turn text is still excluded unless logTurnText is true.
     logDir: null,
     logTurnText: false,
+  delegationTools: structuredClone(DEFAULT_DELEGATION_TOOLS),
     redactPatterns: [],
     includeFallbackLine: true,
   };
@@ -328,15 +354,33 @@ export function validate(config) {
       throw new Error(`${where}: profile "${name}" probabilityMax must be an object keyed by question id`);
     }
     for (const [questionId, limits] of Object.entries(probMax)) {
+      const question = config.questions?.[questionId];
+      if (question?.type !== "score") {
+        throw new Error(`${where}: profile "${name}" probabilityMax.${questionId} names no configured score question`);
+      }
       if (typeof limits !== "object" || limits === null || Object.keys(limits).length === 0) {
         throw new Error(`${where}: profile "${name}" probabilityMax.${questionId} must map level names to probabilities`);
       }
+      const names = criteriaLevelNames(question);
       for (const [level, max] of Object.entries(limits)) {
         if (!Number.isFinite(max) || max < 0 || max > 1) {
           throw new Error(`${where}: profile "${name}" probabilityMax.${questionId}.${level} must be in [0, 1]`);
         }
+        // Accept rubric names ("infra"), tail sums ("public_api+" = that
+        // level or worse), or numeric indices — nothing else.
+        const bare = level.endsWith("+") ? level.slice(0, -1) : level;
+        const index = /^\d+$/.test(bare) ? Number(bare) : names.indexOf(bare);
+        if (index === -1 || index >= names.length) {
+          throw new Error(`${where}: profile "${name}" probabilityMax.${questionId}.${level} is not in the rubric (${names.join("|")})`);
+        }
       }
     }
+  }
+  const tools = config.delegationTools ?? [];
+  if (!Array.isArray(tools) || tools.length === 0
+    || tools.some((tool) => typeof tool?.toolName !== "string" || tool.toolName.length === 0
+      || typeof tool?.provider !== "string" || tool.provider.length === 0)) {
+    throw new Error(`${where}: delegationTools must list { toolName, provider } pairs`);
   }
   for (const [role, route] of Object.entries(config.routes ?? {})) {
     if (typeof route?.provider !== "string" || typeof route?.model !== "string"
