@@ -18,7 +18,7 @@ For a dispatch plugin, calling Jev before knowing whether the agent can delegate
 - the subagent service is present and the provider behind the visible tool is registered;
 - the agent has remaining delegation depth (`session.header.delegationDepth` against the effective depth limit — provider-managed limits always leave room locally);
 - the session's model-selection policy (`subagentModelSelectionPolicy` projection): when model selection is **off**, the subagent tool takes no model argument and the recommendation names no model — the session's configured child default applies; when it is **on**, a configured route is named only if the session allowlist contains it, otherwise the message points the agent at `list_subagent_models`;
-- **which tool** was found: a fork-only setup never sees a named model, because `subagent_fork` is fixed-route by design — the fork inherits the parent's model and context, so the advice renders as "the fork inherits your model and context". A model name is only ever advice the visible tool can follow.
+- **which tool, and its provider**: a fork is fixed-route no matter what the tool is called — the advice renders as "the fork inherits your model and context" for `subagent_fork` and for a custom-named tool with `provider: fork` alike. A model name is only ever advice the visible tool can follow.
 
 | Situation | Explicit `/route` request | Ordinary turn (`auto`) |
 |---|---|---|
@@ -77,7 +77,7 @@ Fail-open everywhere: a missing key, a timeout, a 429, or a broken config logs t
 The state sent to TypeSafe is deliberately minimal and is **redacted before it leaves the machine**:
 
 - the user's turn text plus a `workspace:` line — no diffs, no tool output, no file contents;
-- the **assembled** state is redacted as a whole (the workspace path travels through the same credential filters as the task text) and only then capped to `stateChars` (default 1200), so a long path can neither leak nor push the task text out of the payload;
+- the **task text leads** the state and the workspace path trails as bounded context (≤ 120 chars) — the whole assembled payload is redacted (the path passes the same credential filters as the task text) and capped to `stateChars` (default 1200) as a whole, so no path length can leak, exceed the cap, or push the task out;
 - credential-shaped substrings (`sk-…`, `ghp_…`, `github_pat_…`, `AKIA…`, `Bearer …`, `api_key=…`, long base64 tokens) are replaced with `[redacted]` by built-in patterns; `redactPatterns` adds your own regex sources;
 - logging is **opt-in** (`logDir`), and the user's turn text reaches the log only when `logTurnText` is true — the verdict itself (class, scores, probabilities, route, usage) is what you calibrate against.
 
@@ -114,7 +114,9 @@ profiles:
         user_explicit: 0.3
         risky: 0.2
       # cap the probability of a severe level, not only the average score;
-      # levels are rubric names, "name+" sums that level and everything worse
+      # levels are rubric names (structured criteria entries are addressed
+      # by index), "name+" sums that level and everything worse; an
+      # incomplete score distribution fails the gate closed
       probabilityMax:
         blast_radius: { "public_api+": 0.15, infra: 0.05 }
 routeFor:
@@ -228,7 +230,7 @@ flips by reason:
   7  effort 1.4 > effortMax
 ```
 
-Add `--json` for machine-readable output. Replay keeps decisions reviewable: you see exactly which historical turns a threshold change would have flipped before you commit it. The planned routing ledger (correlating verdict `id`s with actual child calls and rework) will let replay compare policy changes against observed outcomes too.
+Route-only changes are counted separately: a candidate that maps a task class to another role reports `N route-only` flips with a `from → to` breakdown per route, distinct from delegate↔skip flips. Records from older logs without route fields are never counted as route changes. Add `--json` for machine-readable output. Replay keeps decisions reviewable: you see exactly which historical turns a threshold change would have flipped before you commit it. The planned routing ledger (correlating verdict `id`s with actual child calls and rework) will let replay compare policy changes against observed outcomes too.
 
 ## Testing
 
