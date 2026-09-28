@@ -31,13 +31,30 @@ export function replayRecord(record, config) {
   const answers = record?.answers;
   if (answers === null || typeof answers !== "object" || answers.task_class === undefined) return null;
   const decision = decide({ answers, model: record?.model, usage: record?.usage, latencyMs: record?.latencyMs }, config);
+  const actionChanged = decision.action !== record?.action;
+  // A policy change can also move the recommendation WITHIN delegate:
+  // task-class edits and routeFor/routes changes change which child runs.
+  // Comparable only when the historical record actually carries its route —
+  // older logs predate role/route fields, and a missing side is not a change.
+  const knownRoute = record?.role !== undefined && record?.route !== undefined;
+  const routeChanged = !actionChanged
+    && decision.action === "delegate"
+    && record?.action === "delegate"
+    && knownRoute
+    && (decision.role !== record.role
+      || decision.route?.provider !== record.route.provider
+      || decision.route?.model !== record.route.model);
   return {
     id: record?.id ?? null,
     at: record?.at ?? null,
     taskClass: String(answers.task_class?.value ?? "unknown"),
     from: record?.action ?? null,
     to: decision.action,
-    changed: decision.action !== record?.action,
+    changed: actionChanged || routeChanged,
+    actionChanged,
+    routeChanged,
+    fromRoute: record?.role && record?.route ? `${record.role}@${record.route.provider}/${record.route.model}` : null,
+    toRoute: decision.role && decision.route ? `${decision.role}@${decision.route.provider}/${decision.route.model}` : null,
     reason: decision.reason ?? null,
     confidence: numberOr(decision.confidence, null),
   };
@@ -59,16 +76,24 @@ export function replayLog(records, candidateInput = {}) {
     .map((record) => replayRecord(record, config))
     .filter((result) => result !== null);
   const flips = results.filter((result) => result.changed);
+  const routeFlips = results.filter((result) => result.routeChanged);
   const group = (key) => flips.reduce((acc, result) => {
     acc[result[key]] = (acc[result[key]] ?? 0) + 1;
+    return acc;
+  }, {});
+  const routeGroup = routeFlips.reduce((acc, result) => {
+    const key = `${result.fromRoute} → ${result.toRoute}`;
+    acc[key] = (acc[key] ?? 0) + 1;
     return acc;
   }, {});
   return {
     judged: results.length,
     unchanged: results.length - flips.length,
     flips: flips.length,
+    routeFlips: routeFlips.length,
     byClass: group("taskClass"),
     byReason: group("reason"),
+    byRoute: routeGroup,
     results,
   };
 }
@@ -80,7 +105,7 @@ export function replayLog(records, candidateInput = {}) {
  */
 export function renderReplayReport(outcome) {
   const lines = [
-    `[jev-subagent-dispatch] replay: ${outcome.judged} judged, ${outcome.unchanged} unchanged, ${outcome.flips} would flip`,
+    `[jev-subagent-dispatch] replay: ${outcome.judged} judged, ${outcome.unchanged} unchanged, ${outcome.flips} would flip (${outcome.routeFlips} route-only)`,
   ];
   const section = (title, groups) => {
     lines.push(`${title}:`);
@@ -95,6 +120,7 @@ export function renderReplayReport(outcome) {
   };
   section("flips by task class", outcome.byClass);
   section("flips by reason", outcome.byReason);
+  section("route changes", outcome.byRoute ?? {});
   return lines.join("\n");
 }
 

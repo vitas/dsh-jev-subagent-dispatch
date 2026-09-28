@@ -116,6 +116,7 @@ export const DEFAULT_QUESTIONS = {
  * Rubric level names for a question, in order: for score questions the part
  * of each criteria entry before the " — " description separator; for choice
  * questions the criteria keys; noul has no levels.
+ * (string names, or structured objects — object levels are addressed by their numeric index)
  * @param question - a configured question definition.
  * @returns the ordered level names (empty for noul).
  */
@@ -123,7 +124,9 @@ export function criteriaLevelNames(question) {
   if (!question || question.type === "noul") return [];
   if (question.type === "choice") return Object.keys(question.criteria ?? {});
   return (Array.isArray(question.criteria) ? question.criteria : [])
-    .map((entry) => String(entry).split(" — ")[0].trim());
+    .map((entry, index) => (
+      typeof entry === "string" ? entry.split(" — ")[0].trim() : String(index)
+    ));
 }
 
 /**

@@ -183,9 +183,10 @@ export function apply(ctx, input = {}, deps = {}) {
         // policy allows it AND the visible tool can follow it; otherwise the
         // recommendation defers to the child default or the session
         // allowlist. Re-read at request time.
+        const selectedTool = (config.delegationTools ?? []).find((tool) => tool.toolName === capabilities.toolName);
         const routeAdvice = routeAdviceFor(capabilities.routePolicy, outcome.route, capabilities.routePolicy === "named"
           ? services.sessionProjections?.stateOf?.(agent?.session, "subagentModelSelectionPolicy")
-          : undefined, capabilities.toolName);
+          : undefined, capabilities.toolName, selectedTool?.provider);
         addition = await buildMessage(renderVerdictMessage(outcome, config, { preview: trigger?.action === "preview", routeAdvice }));
       } else if (outcome.action === "skip" && trigger?.action === "preview") {
         // Preview exists to inspect the cases you cannot see otherwise —

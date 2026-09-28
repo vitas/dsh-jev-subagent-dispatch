@@ -86,12 +86,16 @@ export function buildState(messages, cwd, stateChars, extraRedactPatterns = [], 
   const task = String(explicitTask ?? "").trim();
   const bodyParts = task.length > 0 ? [task, ...turns] : turns;
   if (bodyParts.length === 0) return "";
-  const prefix = `workspace: ${cwd}\ntask:\n`;
-  // Redact the COMPLETE assembled state — the workspace path travels through
-  // the same credential filters as the task text — and apply the final cap to
-  // the whole result, so a long path cannot exceed stateChars or push the
-  // task text out of the payload. The explicit task still leads.
-  const state = redact(`${prefix}${bodyParts.join("\n---\n")}`, extraRedactPatterns);
+  // The task text goes FIRST — it is what the classifier reads — and the
+  // workspace path trails as bounded context. The whole assembled state is
+  // redacted (the path passes the same credential filters as the task text)
+  // and capped as a whole, so no path length can push the task out of the
+  // payload; a very long path just loses its tail inside the reserved room.
+  const body = redact(bodyParts.join("\n---\n"), extraRedactPatterns);
+  const maxPath = Math.max(0, Math.min(120, stateChars - body.length));
+  const path = redact(String(cwd ?? ""), extraRedactPatterns);
+  const trail = path.length > maxPath ? path.slice(0, maxPath) : path;
+  const state = `${body}\nworkspace: ${trail}`;
   return state.length > stateChars ? state.slice(0, Math.max(0, stateChars)) : state;
 }
 

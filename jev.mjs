@@ -162,7 +162,11 @@ function normalizeProbabilities(question, probabilities) {
   // names ("infra"), so translate positions onto the configured level names;
   // unknown keys pass through unchanged.
   if (question.type === "score") {
-    const names = (Array.isArray(question.criteria) ? question.criteria : []).map((entry) => String(entry).split(" — ")[0].trim());
+    // Level names follow criteriaLevelNames: string entries contribute the
+    // part before the " — " separator, structured entries their index — so
+    // policy names and normalized probability keys never collide.
+    const names = (Array.isArray(question.criteria) ? question.criteria : [])
+      .map((entry, index) => (typeof entry === "string" ? entry.split(" — ")[0].trim() : String(index)));
     if (Array.isArray(probabilities)) {
       const out = {};
       names.forEach((name, index) => {
@@ -178,8 +182,11 @@ function normalizeProbabilities(question, probabilities) {
         const name = String(Number.isInteger(position) && String(position) === key && position >= 0 && position < names.length ? names[position] : key);
         out[name] = clamp01(value);
       }
-      // a level absent from the response carries no mass
-      for (const name of names) out[name] ??= 0;
+      // TypeSafe documents a FULL score distribution. A response naming only
+      // some levels is malformed: treating the missing mass as zero would
+      // let a policy read a fabricated P(severe) = 0. Null makes the policy
+      // fail closed (probabilityMax active) or pass without a risk gate.
+      if (names.some((name) => out[name] === undefined)) return null;
       return out;
     }
     return null;

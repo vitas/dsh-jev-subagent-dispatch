@@ -10,7 +10,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { defaults, PROVIDER_PRESETS, resolveConfig, validate } from "../config.mjs";
+import { criteriaLevelNames, defaults, PROVIDER_PRESETS, resolveConfig, validate } from "../config.mjs";
 import { buildRequestBody, buildRequestUrl, normalizeAnswers } from "../jev.mjs";
 import { apply } from "../index.mjs";
 import { checkDispatchCapabilities, delegationDepthOf, routeAdviceFor } from "../capabilities.mjs";
@@ -193,12 +193,14 @@ test("verdict: buildState caps, redacts, and ignores plugin turns", () => {
     { role: "user", content: [{ type: "text", text: "rename foo with key sk-abc123def456ghij7890" }] },
   ];
   const state = buildState(messages, "/w", 2000);
-  assert.match(state, /^workspace: \/w\ntask:\nrename foo/);
+  assert.match(state, /^rename foo/); // the task leads
+  assert.match(state, /\nworkspace: \/w$/); // the path trails, bounded
   assert.doesNotMatch(state, /injected/);
   assert.doesNotMatch(state, /sk-abc123/);
   assert.match(state, /\[redacted\]/);
   const capped = buildState(messages, "/w", 20);
   assert.ok(capped.length <= 20);
+  assert.match(capped, /^rename/); // even a tiny cap keeps the task head
   assert.equal(buildState([{ role: "assistant", content: [] }], "/w", 100), "");
 });
 
@@ -478,7 +480,8 @@ test("triggers: explicit task leads the state ahead of the cap", () => {
     [{ role: "user", content: [{ type: "text", text: "/route fix the failing tests in the parser" }] }],
     "/w", once.stateChars, [], "fix the failing tests in the parser",
   );
-  assert.match(state, /task:\nfix the failing tests in the parser/);
+  assert.match(state, /^fix the failing tests in the parser/);
+  assert.match(state, /\nworkspace: \/w$/);
 });
 
 test("host: mode once passes unmarked turns through with zero cost", async () => {
@@ -710,9 +713,9 @@ test("host: a previewed miss injects the skip verdict, not silence", async () =>
 
 test("advice: a fork-only setup never names a model", () => {
   const route = { provider: "openrouter", model: "deepseek-v4-flash" };
-  assert.deepEqual(routeAdviceFor("named", route, [{ provider: "openrouter", model: "deepseek-v4-flash" }], "subagent_fork"), { kind: "fork" });
-  assert.deepEqual(routeAdviceFor("fixed", route, undefined, "subagent_fork"), { kind: "fork" });
-  assert.deepEqual(routeAdviceFor("named", route, [{ provider: "openrouter", model: "deepseek-v4-flash" }], "subagent"), { kind: "named", route });
+  assert.deepEqual(routeAdviceFor("named", route, [{ provider: "openrouter", model: "deepseek-v4-flash" }], "subagent_fork", "fork"), { kind: "fork" });
+  assert.deepEqual(routeAdviceFor("fixed", route, undefined, "subagent_fork", "fork"), { kind: "fork" });
+  assert.deepEqual(routeAdviceFor("named", route, [{ provider: "openrouter", model: "deepseek-v4-flash" }], "subagent", "spawn"), { kind: "named", route });
 
   const forkOnly = {
     tools: { get: (name) => (name === "subagent_fork" ? { name } : undefined) },
@@ -722,8 +725,8 @@ test("advice: a fork-only setup never names a model", () => {
   assert.equal(check.ok, true);
   assert.equal(check.toolName, "subagent_fork");
   const decision = { action: "delegate", answers: { task_class: { value: "mechanical" } }, role: "implementer", confidence: 0.9, route };
-  const text = renderVerdictMessage(decision, config, { routeAdvice: routeAdviceFor("named", route, [{ provider: "openrouter", model: "deepseek-v4-flash" }], check.toolName) });
-  assert.match(text, /subagent_fork → the fork inherits your model and context/);
+  const text = renderVerdictMessage(decision, config, { routeAdvice: routeAdviceFor("named", route, [{ provider: "openrouter", model: "deepseek-v4-flash" }], check.toolName, "fork") });
+  assert.match(text, /the fork inherits your model and context/);
   assert.doesNotMatch(text, /deepseek-v4-flash/);
 });
 
@@ -782,9 +785,11 @@ test("policy: score probabilities are normalized onto rubric names", () => {
     Object.keys(normalized.blast_radius.probabilities),
     ["trivial", "module", "cross_module", "public_api", "infra"],
   );
-  // Real responses may key positions by stringified indices ("4").
+  // Real responses may key positions by stringified indices ("4"); a FULL
+  // positional map is translated. (An INCOMPLETE one is rejected — see the
+  // risk-gate test below.)
   const positional = normalizeAnswers({
-    answers: { ...documentedAnswers().answers, blast_radius: { type: "score", score: 1, probabilities: { "0": 0.5, "1": 0.5 }, confidence: 0.9 } },
+    answers: { ...documentedAnswers().answers, blast_radius: { type: "score", score: 1, probabilities: { "0": 0.5, "1": 0.5, "2": 0, "3": 0, "4": 0 }, confidence: 0.9 } },
   }, config.questions);
   assert.deepEqual(positional.blast_radius.probabilities, { trivial: 0.5, module: 0.5, cross_module: 0, public_api: 0, infra: 0 });
 });
@@ -872,4 +877,92 @@ test("capabilities: configured custom tool names are probed too", () => {
   assert.equal(check.ok, true);
   assert.equal(check.toolName, "delegate_task");
   assert.throws(() => resolveConfig({ delegationTools: [{ toolName: "", provider: "spawn" }] }), /delegationTools/);
+});
+
+test("policy: an incomplete score distribution fails the risk gate closed", () => {
+  // reproduced from review: response naming only the first level
+  const incomplete = normalizeAnswers({
+    answers: { ...documentedAnswers().answers, blast_radius: { type: "score", score: 0, probabilities: { trivial: 0.2 }, confidence: 0.9 } },
+  }, config.questions);
+  assert.equal(incomplete.blast_radius.probabilities, null, "partial object distribution is rejected");
+  const gated = {
+    ...config,
+    profiles: { ...config.profiles, auto: { ...config.profiles.auto, delegate: { ...config.profiles.auto.delegate, probabilityMax: { blast_radius: { "public_api+": 0 } } } } },
+  };
+  const decision = decide({ answers: incomplete, model: "m" }, gated);
+  assert.equal(decision.action, "skip");
+  assert.match(decision.reason, /probabilities missing/);
+  // the same shape passes when no risk gate is configured
+  assert.equal(decide({ answers: incomplete, model: "m" }, config).action, "delegate");
+});
+
+test("verdict: the task text survives an unbounded workspace path", () => {
+  const messages = [{ role: "user", content: [{ type: "text", text: "rename foo to bar" }] }];
+  const longPath = "/" + "a".repeat(200);
+  const state = buildState(messages, longPath, 100);
+  assert.ok(state.startsWith("rename foo to bar"), "task leads the payload");
+  assert.ok(state.length <= 100);
+  assert.ok(state.includes("workspace:"), "path survives as bounded context");
+  // normal case: both body and path present, body first
+  const wide = buildState(messages, "/home/dev/project", 2000);
+  assert.match(wide, /^rename foo to bar\nworkspace: \/home\/dev\/project$/);
+});
+
+test("advice: a custom-named fork tool is recognized by its provider", () => {
+  const route = { provider: "openrouter", model: "deepseek-v4-flash" };
+  // provider decides, not the tool name
+  assert.deepEqual(routeAdviceFor("named", route, [{ provider: "openrouter", model: "deepseek-v4-flash" }], "fork_worker", "fork"), { kind: "fork" });
+  assert.deepEqual(routeAdviceFor("named", route, [{ provider: "openrouter", model: "deepseek-v4-flash" }], "subagent", "spawn"), { kind: "named", route });
+
+  const customFork = {
+    tools: { get: (name) => (name === "fork_worker" ? { name } : undefined) },
+    subagents: { getProvider: (name) => ({ name }), resolveMaxDepth: () => 8 },
+  };
+  const tools = [{ toolName: "fork_worker", provider: "fork" }];
+  const check = checkDispatchCapabilities(customFork, { session: {} }, tools);
+  assert.equal(check.ok, true);
+  assert.equal(check.toolName, "fork_worker");
+  const decision = { action: "delegate", answers: { task_class: { value: "mechanical" } }, role: "implementer", confidence: 0.9, route };
+  const text = renderVerdictMessage(decision, config, { routeAdvice: routeAdviceFor("named", route, [{ provider: "openrouter", model: "deepseek-v4-flash" }], check.toolName, "fork") });
+  assert.doesNotMatch(text, /deepseek-v4-flash/);
+  assert.match(text, /the fork inherits your model and context/);
+});
+
+test("replay: route-only changes are counted separately", async () => {
+  const { replayRecord } = await import("../replay.mjs");
+  const answers = normalizeAnswers(documentedAnswers(), config.questions);
+  const record = { id: "id-1", action: "delegate", role: "implementer", route: { provider: "openrouter", model: "deepseek-v4-flash" }, answers, model: "m" };
+  // candidate maps mechanical → researcher: same action, different child
+  const candidate = { ...config, routeFor: { ...config.routeFor, mechanical: "researcher" } };
+  const result = replayRecord(record, candidate);
+  assert.equal(result.actionChanged, false);
+  assert.equal(result.routeChanged, true);
+  assert.equal(result.changed, true);
+  assert.equal(result.fromRoute, "implementer@openrouter/deepseek-v4-flash");
+  assert.equal(result.toRoute, "researcher@openrouter/qwen3.8-flash");
+  // unchanged when role and route match
+  const same = replayRecord(record, config);
+  assert.equal(same.changed, false);
+});
+
+test("config: structured score criteria are addressed by index", () => {
+  const structured = resolveConfig({
+    questions: { effort: { type: "score", instructions: "i", criteria: [{ name: "small", detail: "d" }, { name: "large", detail: "d" }] } },
+  });
+  const names = criteriaLevelNames(structured.questions.effort);
+  assert.deepEqual(names, ["0", "1"]); // no "[object Object]"
+  // normalization maps positions onto the same index names — no collapse
+  const normalized = normalizeAnswers({
+    answers: { effort: { type: "score", score: 1, probabilities: { "0": 0.7, "1": 0.3 }, confidence: 0.9 } },
+  }, structured.questions);
+  assert.deepEqual(normalized.effort.probabilities, { "0": 0.7, "1": 0.3 });
+  // a probabilityMax policy speaks the same index names
+  const gated = resolveConfig({
+    questions: structured.questions,
+    profiles: { auto: { delegate: { probabilityMax: { effort: { "1": 0.2 } } } } },
+  });
+  const highTail = normalizeAnswers({
+    answers: { effort: { type: "score", score: 1, probabilities: { "0": 0.6, "1": 0.4 }, confidence: 0.9 } },
+  }, gated.questions);
+  assert.equal(decide({ answers: highTail, model: "m" }, gated).action, "skip");
 });
