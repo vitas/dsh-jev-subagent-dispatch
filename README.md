@@ -121,11 +121,12 @@ profiles:
       # incomplete score distribution fails the gate closed
       probabilityMax:
         blast_radius: { "public_api+": 0.15, infra: 0.05 }
-routeFor:
-  mechanical: implementer
+routeFor:            # task class → role that takes it
+  mechanical: junior  # roles name the worker; the class keeps its own name
   bugfix: implementer
   research: researcher
-routes:
+routes:              # role → the model that role runs on
+  junior:      { provider: openrouter, model: qwen3.8-flash }
   implementer: { provider: openrouter, model: deepseek-v4-flash }
   researcher:  { provider: openrouter, model: qwen3.8-flash }
 ```
@@ -184,7 +185,7 @@ All settings live in the plugin row's `config`. The bundle patch ships the docum
 | `profiles` | `auto`, `careful` | `{ confidenceMin, delegate }` predicates |
 | `routeFor` | class → role | which named route a task class maps to |
 | `defaultRoute` | `implementer` | fallback role when the class has no mapping |
-| `routes` | three routes | `role → { provider, model }`; mirror your Subagent allowlist. The card shows one select per role, limited to the models that allowlist permits; without that namespace it falls back to comma-separated `role=provider/model`, where clearing the box restores the shipped triple |
+| `routes` | `junior`, `implementer`, `researcher` | `role → { provider, model }`; mirror your Subagent allowlist. The card shows one select per role, limited to the models that allowlist permits; without that namespace it falls back to comma-separated `role=provider/model`, where clearing the box restores the shipped triple |
 | `skipSubagentSessions` | `true` | only main-agent turns are routed |
 | `logDir` | `null` | NDJSON verdict sink; **`null` or `""` disables logging**; set a directory path to opt in |
 | `logTurnText` | `false` | when logging is on, include the (redacted) turn text in the log |

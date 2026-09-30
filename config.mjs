@@ -172,19 +172,21 @@ export const DEFAULT_PROFILES = {
 /**
  * Named routes: role → the subagent model that should take it.
  *
- * Three roles, not two, because `mechanical` and `bugfix` are delegated together
- * but are not the same job: a rename or a reformat has an unambiguous spec,
- * while a bug fix has to find the cause first. Sharing one model meant paying
- * the bug-fix price for renames. `refactor`, `feature_work` and `meta_chat` are
- * deliberately absent from `profiles.*.delegate.taskClass`, so they never reach
- * a route at all — they stay with the main agent.
+ * Three roles, not two, because the `mechanical` and `bugfix` task classes are
+ * delegated together but are not the same job: a rename or a reformat has an
+ * unambiguous spec, while a bug fix has to find the cause first. Sharing one
+ * model meant paying the bug-fix price for renames. `refactor`, `feature_work`
+ * and `meta_chat` are deliberately absent from `profiles.*.delegate.taskClass`,
+ * so they never reach a route at all — they stay with the main agent.
  *
- * `mechanical` and `researcher` ship on the same model id; they are separate
- * keys so a profile can point each at whatever its own allowlist permits, which
- * the configuration card makes a two-click change.
+ * Roles name the worker, not the work: the class is `mechanical`, the role that
+ * takes it is `junior` — well-specified jobs, no diagnosis, so it is the one to
+ * point at whatever your cheapest model is. `junior` and `researcher` ship on
+ * the same model id; they are separate keys so a profile can move each
+ * independently, which the configuration card makes a two-click change.
  */
 export const DEFAULT_ROUTES = {
-  mechanical: { provider: "openrouter", model: "qwen3.8-flash" },
+  junior: { provider: "openrouter", model: "qwen3.8-flash" },
   implementer: { provider: "openrouter", model: "deepseek-v4-flash" },
   researcher: { provider: "openrouter", model: "qwen3.8-flash" },
 };
@@ -250,7 +252,7 @@ export function defaults() {
     questions: structuredClone(DEFAULT_QUESTIONS),
     activeProfile: "auto",
     profiles: structuredClone(DEFAULT_PROFILES),
-    routeFor: { mechanical: "mechanical", bugfix: "implementer", research: "researcher" },
+    routeFor: { mechanical: "junior", bugfix: "implementer", research: "researcher" },
     defaultRoute: "implementer",
     routes: structuredClone(DEFAULT_ROUTES),
     // Turn triggers for `once` mode (and preview requests in `auto`).
@@ -442,6 +444,27 @@ export function resolveConfig(input = {}) {
   const { questions, routes, ...rest } = input ?? {};
   const merged = mergeDefaults(presetApplied, rest);
   merged.questions = mergeMaps(presetApplied.questions, questions);
-  merged.routes = mergeMaps(presetApplied.routes, routes);
+  merged.routes = mergeMaps(presetApplied.routes, foldLegacyRoutes(routes));
   return validate(merged);
+}
+
+/**
+ * The `mechanical` role was renamed to `junior` in 0.7.0: roles name the worker,
+ * and `mechanical` was the task class it serves leaking into a role name.
+ *
+ * The rename needs a migration rather than a changelog note, because the
+ * configuration card commits the *whole* routes map on any edit. An edit made
+ * before the upgrade therefore persists the old key next to the new default one,
+ * and the card would show four roles — one of them permanently unreachable, since
+ * `routeFor` sends the `mechanical` class to `junior`.
+ *
+ * Folding the old key into the new one on the *input* side, before defaults are
+ * merged in, keeps the priority right: an explicit `junior` from a profile wins
+ * over a stale `mechanical`, while a stale `mechanical` still carries whatever
+ * its owner last set instead of silently reverting to the shipped model.
+ */
+function foldLegacyRoutes(routes) {
+  if (routes === null || typeof routes !== "object" || !("mechanical" in routes)) return routes;
+  const { mechanical, ...rest } = routes;
+  return "junior" in rest ? rest : { ...rest, junior: mechanical };
 }

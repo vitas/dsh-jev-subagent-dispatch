@@ -4,6 +4,21 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 semantic versioning.
 
+## [0.7.0] - 2026-09-30
+
+### Changed
+
+- The third role is now `junior`, not `mechanical`. Roles name the worker —
+  `implementer`, `researcher` — and `mechanical` was the *task class* it serves
+  leaking into a role name. The class keeps its name (Jev's rubric decides it and
+  `routeFor` still keys on it), so only the role key moved: `routeFor:
+  { mechanical: junior }`, `routes: { junior: ... }`.
+- Configurations written before the rename keep working: a stale `mechanical`
+  route is folded into `junior` on load. That is a migration rather than a note
+  because the card commits the whole routes map on any edit, so an edit made
+  before the upgrade would otherwise leave a fourth, permanently unreachable role
+  sitting in the patch. An explicit `junior` outranks the stale key.
+
 ## [0.6.0] - 2026-09-30
 
 Two answers to "what if the setup is wrong, and what if the job is simple".

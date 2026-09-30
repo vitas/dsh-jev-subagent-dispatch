@@ -174,16 +174,18 @@
                 user_explicit: 0.1
                 risky: 0.05
         routeFor:
-          mechanical: mechanical
+          mechanical: junior
           bugfix: implementer
           research: researcher
         defaultRoute: implementer
-        # Three routes, because `mechanical` and `bugfix` are delegated together
-        # but are not one job: a rename has an unambiguous spec, a bug fix has to
-        # find the cause first. Point `mechanical` at the cheapest model your
-        # Subagent allowlist permits — the configuration card lists exactly those.
+        # Three routes, because the `mechanical` and `bugfix` classes are
+        # delegated together but are not one job: a rename has an unambiguous
+        # spec, a bug fix has to find the cause first. Roles name the worker, so
+        # the `mechanical` class is taken by `junior` — point that at the
+        # cheapest model your Subagent allowlist permits; the card lists exactly
+        # those.
         routes:
-          mechanical:
+          junior:
             provider: openrouter
             model: qwen3.8-flash
           implementer:
