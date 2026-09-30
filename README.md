@@ -10,6 +10,27 @@ Jev does not write code and is not a chat LLM. It answers typed questions (`choi
 
 The injection is **advice, not enforcement**: the main agent weighs it and can ignore it. Measure the recommendation's quality (see [Measuring impact](#measuring-impact)) before trusting it in daily work.
 
+## At a glance
+
+**The Subagent plugin has to be active.** Delegation is not something this plugin can provide: DSH composes the subagent service, a child provider behind it, and the `subagent` tool separately, and this package deliberately takes no dependency on any of them — it re-checks at request time instead, and the card warns you when the plugin's absence is visible from settings. With it off, a verdict is still produced; there is simply nowhere to send it.
+
+**Its routes must name models your session allowlist permits.** A route the allowlist forbids still classifies, so the verdict reads as healthy while dispatch is impossible. The card removes the trap: one select per role, offering exactly the allowlisted models.
+
+| Jev's task class | Role that takes it | Shipped route | Delegated |
+|---|---|---|---|
+| `mechanical` — renames, reformatting, comments, boilerplate | `junior` | `openrouter/qwen3.8-flash` | yes |
+| `bugfix` | `implementer` | `openrouter/deepseek-v4-flash` | yes |
+| `research` | `researcher` | `openrouter/qwen3.8-flash` | yes |
+| `refactor`, `feature_work`, `meta_chat` | — | — | **no** — absent from `profiles.*.delegate.taskClass`, so they never reach a route |
+
+*Delegated* is the shipped `auto` profile. The stricter `careful` profile delegates only `mechanical`, and the predicate's ceilings (effort, blast radius, per-question probabilities) can hold any class back regardless of its role.
+
+![One model select per role, each offering the models your Subagent allowlist permits](docs/settings-routes.png)
+
+Roles name the worker, classes name the work. `routeFor` maps a class to a role and `routes` maps a role to a model, so you can add a role, or point an existing one at a different model, without touching the rubric. `junior` exists because `mechanical` and `bugfix` are delegated together but are not one job — a rename has an unambiguous spec, a bug fix has to find the cause first — and it is the role to point at your cheapest model.
+
+Everything below is the detail behind those facts; the failure modes are in [Dispatch capability is a prerequisite](#dispatch-capability-is-a-prerequisite).
+
 ## Dispatch capability is a prerequisite
 
 For a dispatch plugin, calling Jev before knowing whether the agent can delegate at all would waste the call. DSH needs **three pieces** for delegation — the subagent service, a child provider behind it, and a delegation tool visible to the agent — and a **depth limit of 0 disables delegation entirely**. Installing this plugin implies none of that, so every routing request re-verifies capability at request time against the live host services (never a package dependency, never a boot-time snapshot):
@@ -163,7 +184,9 @@ Set `mock: true` in the plugin row config. The mock classifier answers from keyw
 
 ## Settings
 
-Two surfaces, one source of truth. The plugin's **own configuration page under Plugins** (DSH 0.1.7+, reachable from the row's **Configure** control) — or the **Plugins settings tab** on 0.1.5 — edits the top-level fields live: mode, provider preset, decision profile, triggers, routes, log directory and turn-text switch, state cap, and the classifier endpoint group — edits reach the next turn **without a host restart**, and a rejected value keeps the previous good config. Routes are here because they are the one nested field that fails quietly: a route naming a model your Subagent allowlist forbids still classifies, so the verdict reads as healthy while there is nowhere to dispatch. The card reads that allowlist from the `subagent-model-selection-settings` namespace — another plugin's, bound through `configForms.get`, which the framework documents for exactly this — and offers its models as one select per role, so the mistake is not available to make. Where that namespace is not served, the raw `role=provider/model` field returns unchanged. The **profile patch** remains the base layer for everything the card deliberately does not fake: profile thresholds (`effortMax`, `noulMax`, `probabilityMax`), `routeFor`, custom `questions`, `delegationTools`.
+![The plugin's own configuration page: every field edits the live config](docs/settings-card.png)
+
+Two surfaces, one source of truth. The plugin's **own page under Plugins** (DSH 0.1.7+, where the form renders inline on the package page; the row's **Configure** control opens the same form) — or the **Plugins settings tab** on 0.1.5 — edits the top-level fields live: mode, provider preset, decision profile, triggers, routes, log directory and turn-text switch, state cap, and the classifier endpoint group — edits reach the next turn **without a host restart**, and a rejected value keeps the previous good config. Routes are here because they are the one nested field that fails quietly: a route naming a model your Subagent allowlist forbids still classifies, so the verdict reads as healthy while there is nowhere to dispatch. The card reads that allowlist from the `subagent-model-selection-settings` namespace — another plugin's, bound through `configForms.get`, which the framework documents for exactly this — and offers its models as one select per role, so the mistake is not available to make. Where that namespace is not served, the raw `role=provider/model` field returns unchanged. The **profile patch** remains the base layer for everything the card deliberately does not fake: profile thresholds (`effortMax`, `noulMax`, `probabilityMax`), `routeFor`, custom `questions`, `delegationTools`.
 
 All settings live in the plugin row's `config`. The bundle patch ships the documented defaults; override the same row by id in your profile's `cordis.patch.yml` (edits there are the base layer the card rides on). Merging: `questions` and `routes` merge per key (override one entry, keep the rest); `profiles` deep-merge (tweak one threshold, keep the predicate); everything else follows ordinary deep-merge rules.
 

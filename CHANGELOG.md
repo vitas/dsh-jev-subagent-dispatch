@@ -4,6 +4,20 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 semantic versioning.
 
+## [0.7.1] - 2026-09-30
+
+### Added
+
+- Screenshots of the configuration card and of the routes group (`docs/`), and
+  the card is now described where it is documented rather than only in prose.
+
+### Changed
+
+- The README leads with the two facts that decide whether the plugin works at all
+  — the Subagent plugin must be active, and routes must name allowlisted models —
+  followed by the task-class → role → route table that used to be scattered across
+  three sections.
+
 ## [0.7.0] - 2026-09-30
 
 ### Changed
