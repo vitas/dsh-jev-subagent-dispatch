@@ -323,8 +323,14 @@ test("verdict: rendered message is a recommendation naming the route", () => {
 function fakeContext(services = {}) {
   const calls = [];
   let gets = 0;
-  return {
+  /** The setSource callback the settings seam delivers edits through. */
+  let settingsSource = null;
+  const context = {
     calls,
+    settingsSource,
+    get name() {
+      return "fake-context";
+    },
     get(name) {
       gets += 1;
       return services[name];
@@ -335,8 +341,17 @@ function fakeContext(services = {}) {
     on(event, handler, options) {
       calls.push({ event, handler, options });
     },
-    logger: { info() {}, warn() {}, error() {} },
+    inject(services_, handler) {
+      // Synchronous like the real cordis injector: run the handler now so
+      // tests can reach the settings installer without awaiting a fiber.
+      handler({ settings: { installSection(_ctx, _name, _schema, _base, hooks) {
+        context.settingsSource = hooks.setSource;
+      } } });
+    },
+    effect() {},
+    logger: { info() {}, warn() {}, error() {}, debug() {} },
   };
+  return context;
 }
 
 /** Host services in which dispatch is fully available (model selection ON). */
@@ -360,15 +375,19 @@ function stepInput(text) {
   };
 }
 
-test("host: apply registers one prepended pre-step listener, and only when enabled", () => {
+test("host: apply registers one prepended pre-step listener in every mode", async () => {
   const on = fakeContext();
-  apply(on, { mode: "auto", mock: true });
+  await apply(on, { mode: "auto", mock: true });
   assert.equal(on.calls.length, 1);
   assert.equal(on.calls[0].event, "agent/pre-step");
   assert.deepEqual(on.calls[0].options, { prepend: true });
+  // `off` keeps the listener (so a UI mode change reaches the next turn
+  // without a restart) but the first line of the body returns untouched —
+  // verified by the zero-cost turn test below.
   const off = fakeContext();
-  apply(off, { mode: "off" });
-  assert.equal(off.calls.length, 0);
+  await apply(off, { mode: "off" });
+  assert.equal(off.calls.length, 1);
+  assert.equal(off.calls[0].event, "agent/pre-step");
 });
 
 test("host: a delegating verdict appends one source-attributed message", async () => {
@@ -965,4 +984,48 @@ test("config: structured score criteria are addressed by index", () => {
     answers: { effort: { type: "score", score: 1, probabilities: { "0": 0.6, "1": 0.4 }, confidence: 0.9 } },
   }, gated.questions);
   assert.equal(decide({ answers: highTail, model: "m" }, gated).action, "skip");
+});
+
+test("settings: mode off turns classify nothing at zero cost", async () => {
+  const ctx = fakeContext();
+  await apply(ctx, { mode: "off", mock: true });
+  const listener = ctx.calls[0].handler;
+  const decision = { kind: "enter", messages: [{ role: "user", content: [{ type: "text", text: "/route fix the parser" }] }] };
+  let nextCalls = 0;
+  const result = await listener({ agent: { session: {} }, messages: decision.messages, signal: null }, async () => {
+    nextCalls += 1;
+    return decision;
+  });
+  assert.equal(nextCalls, 1); // downstream always ran
+  assert.equal(result, decision); // untouched — no state built, no call made
+});
+
+test("settings: a UI edit reaches the next turn without re-apply", async () => {
+  const ctx = fakeContext(capableServices());
+  const additions = [];
+  await apply(ctx, { mode: "off", mock: true }, {
+    services: capableServices(),
+    pluginMessage: async (text) => {
+      additions.push(text);
+      return { role: "user", content: [{ type: "text", text }] };
+    },
+  });
+  assert.equal(typeof ctx.settingsSource, "function", "apply wired the settings bridge");
+  const listener = ctx.calls[0].handler;
+  const decision = { kind: "enter", messages: [{ role: "user", content: [{ type: "text", text: "/route rename the config keys everywhere" }] }] };
+  const next = async () => decision;
+  // mode off: the turn passes through untouched
+  assert.equal(await listener({ agent: { session: {} }, messages: decision.messages, signal: null }, next), decision);
+  assert.equal(additions.length, 0);
+  // a UI edit flips the live config — no re-apply, no restart
+  ctx.settingsSource({ mode: "once", mock: true, provider: "openrouter" });
+  const routed = await listener({ agent: { session: {} }, messages: decision.messages, signal: null }, next);
+  assert.notEqual(routed, decision, "the edited mode classified and injected");
+  assert.equal(additions.length, 1);
+  assert.match(additions[0], /subagent/i); // pluginMessage receives the text
+  // an invalid edit is rejected; the good config keeps working
+  ctx.settingsSource({ mode: "once", timeoutMs: -5 });
+  const still = await listener({ agent: { session: {} }, messages: decision.messages, signal: null }, next);
+  assert.notEqual(still, decision);
+  assert.equal(additions.length, 2);
 });

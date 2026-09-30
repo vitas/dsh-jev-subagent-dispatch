@@ -1,0 +1,104 @@
+/** Card copy, keyed and complete across en / zh / ru (scripts/check-locales.mjs). */
+
+export type CopyKey =
+  | 'title' | 'description'
+  | 'mode' | 'modeOff' | 'modeOnce' | 'modeAuto'
+  | 'provider' | 'profile' | 'profileHint'
+  | 'endpoint' | 'apiPath' | 'apiKeyEnv' | 'apiKeyEnvHint' | 'model'
+  | 'triggers' | 'triggersHint' | 'timeoutMs' | 'stateChars'
+  | 'logDir' | 'logDirHint' | 'logTurnText' | 'logTurnTextHint'
+  | 'overridden' | 'reset' | 'saving' | 'unavailable'
+  | 'advanced' | 'advancedHint'
+
+export const en: Record<CopyKey, string> = {
+  title: 'Jev subagent dispatch',
+  description: 'Recommends which subagent model should take a task — cheap routes for routine work, the main model for the hard parts.',
+  mode: 'Mode',
+  modeOff: 'Off',
+  modeOnce: 'On request',
+  modeAuto: 'Every turn',
+  provider: 'Provider preset',
+  profile: 'Decision profile',
+  profileHint: 'auto = looser thresholds, careful = stricter; the thresholds themselves live in the profile patch.',
+  endpoint: 'Endpoint',
+  apiPath: 'API path',
+  apiKeyEnv: 'Key environment variable',
+  apiKeyEnvHint: 'The variable must exist in the dsh process environment; the key itself never enters the UI.',
+  model: 'Classifier model',
+  triggers: 'Request triggers',
+  triggersHint: 'Comma-separated; only used in “On request” mode.',
+  timeoutMs: 'Call timeout (ms)',
+  stateChars: 'State cap (chars)',
+  logDir: 'Verdict log directory',
+  logDirHint: 'Empty = logging off. NDJSON records of every verdict (answers included, turn text excluded).',
+  logTurnText: 'Include turn text in the log',
+  logTurnTextHint: 'Off by default — the log carries answers and metadata, not your words.',
+  overridden: 'overridden',
+  reset: 'reset',
+  saving: 'saving…',
+  unavailable: 'Settings are read-only here — edit the profile patch.',
+  advanced: 'Classifier endpoint (advanced)',
+  advancedHint: 'Preset values; edit only to point at a gateway the preset does not cover.',
+}
+
+export const zh: Record<CopyKey, string> = {
+  title: 'Jev 子代理调度',
+  description: '为每个任务推荐合适的子代理模型——常规工作走便宜路由，主模型专注难点。',
+  mode: '模式',
+  modeOff: '关闭',
+  modeOnce: '按请求',
+  modeAuto: '每轮',
+  provider: '提供商预设',
+  profile: '决策档位',
+  profileHint: 'auto = 阈值宽松，careful = 更严格；阈值本身在 profile patch 中编辑。',
+  endpoint: '端点',
+  apiPath: 'API 路径',
+  apiKeyEnv: '密钥环境变量',
+  apiKeyEnvHint: '该变量需存在于 dsh 进程环境中；密钥本身不进入界面。',
+  model: '分类器模型',
+  triggers: '请求触发词',
+  triggersHint: '逗号分隔；仅在“按请求”模式下使用。',
+  timeoutMs: '调用超时（毫秒）',
+  stateChars: '状态上限（字符）',
+  logDir: '判定日志目录',
+  logDirHint: '留空 = 关闭日志。每次判定的 NDJSON 记录（含答案，不含对话文本）。',
+  logTurnText: '日志中包含对话文本',
+  logTurnTextHint: '默认关闭——日志只携带答案与元数据，不记录你的原话。',
+  overridden: '已覆盖',
+  reset: '还原',
+  saving: '保存中…',
+  unavailable: '此处设置只读——请编辑 profile patch。',
+  advanced: '分类器端点（高级）',
+  advancedHint: '预设值；仅在预设未覆盖的网关时修改。',
+}
+
+export const ru: Record<CopyKey, string> = {
+  title: 'Jev dispatch субагентов',
+  description: 'Рекомендует, какой субагент-моделью взять задачу — рутину на дешёвые маршруты, сложное остаётся основной модели.',
+  mode: 'Режим',
+  modeOff: 'Выкл.',
+  modeOnce: 'По запросу',
+  modeAuto: 'Каждый ход',
+  provider: 'Пресет провайдера',
+  profile: 'Профиль решений',
+  profileHint: 'auto = свободные пороги, careful = строгие; сами пороги правятся в profile patch.',
+  endpoint: 'Endpoint',
+  apiPath: 'API-путь',
+  apiKeyEnv: 'Переменная окружения с ключом',
+  apiKeyEnvHint: 'Переменная должна существовать в окружении процесса dsh; сам ключ в интерфейс не попадает.',
+  model: 'Модель классификатора',
+  triggers: 'Триггеры запроса',
+  triggersHint: 'Через запятую; используются только в режиме «По запросу».',
+  timeoutMs: 'Тайм-аут вызова (мс)',
+  stateChars: 'Лимит состояния (символов)',
+  logDir: 'Каталог лога вердиктов',
+  logDirHint: 'Пусто = лог выключен. NDJSON-записи каждого вердикта (с ответами, без текста хода).',
+  logTurnText: 'Писать текст хода в лог',
+  logTurnTextHint: 'По умолчанию выкл. — в лог идут ответы и метаданные, не ваши слова.',
+  overridden: 'переопределено',
+  reset: 'сброс',
+  saving: 'сохранение…',
+  unavailable: 'Здесь настройки только для чтения — правьте profile patch.',
+  advanced: 'Endpoint классификатора (подробно)',
+  advancedHint: 'Значения пресета; меняйте только для шлюза, которого пресет не покрывает.',
+}

@@ -1,25 +1,31 @@
 {
   "name": "dsh-jev-subagent-dispatch",
-  "version": "0.1.4",
+  "version": "0.2.0",
   "description": "Cut LLM costs: route routine tasks to cheap subagent models (DeepSeek Harness plugin)",
   "license": "MIT",
   "type": "module",
   "main": "./index.mjs",
   "files": [
-    "README.md",
-    "bin/jev-replay.mjs",
-    "capabilities.mjs",
-    "config.mjs",
-    "cordis.patch.yml",
     "index.mjs",
+    "config.mjs",
+    "capabilities.mjs",
     "jev.mjs",
+    "verdict.mjs",
     "replay.mjs",
-    "verdict.mjs"
+    "bin/jev-replay.mjs",
+    "src/shared/config.mjs",
+    "src/host/index.js",
+    "lib/client.js",
+    "cordis.patch.yml",
+    "README.md"
   ],
   "scripts": {
+    "build": "node scripts/build-client.mjs",
+    "prepack": "node scripts/build-client.mjs",
+    "check": "node scripts/check.mjs && node scripts/check-locales.mjs && tsc --noEmit",
     "test": "node --test \"test/**/*.test.mjs\"",
-    "lint": "node scripts/check.mjs",
-    "check": "npm run lint && npm test"
+    "check-locales": "node scripts/check-locales.mjs",
+    "typecheck": "tsc --noEmit"
   },
   "dsh": {
     "bundle": {
@@ -39,5 +45,11 @@
   ],
   "bin": {
     "jev-replay": "./bin/jev-replay.mjs"
+  },
+  "devDependencies": {
+    "@deepseek-ai/schemastery": "^3.18.2",
+    "@types/react": "^18.3.31",
+    "esbuild": "^0.25.0",
+    "typescript": "^5.9.3"
   }
 }

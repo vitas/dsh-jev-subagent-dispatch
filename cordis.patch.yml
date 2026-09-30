@@ -15,7 +15,9 @@
 # descriptions (the answer's `score` is a position 0..n that may land
 # between two levels); Noul takes optional `criteria: { true, false }`.
 #
-# v1 ships no settings card: the profile patch IS the settings surface.
+# A settings card (v0.2+) edits the card fields live from the Plugins tab;
+# deeper policy (profiles, probabilityMax, routeFor, routes) stays HERE —
+# the card shows only top-level fields and points to this file for the rest.
 
 - insert:
     - id: jev-subagent-dispatch

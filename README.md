@@ -160,7 +160,9 @@ Set `mock: true` in the plugin row config. The mock classifier answers from keyw
 
 ## Settings
 
-All settings live in the plugin row's `config`. The bundle patch ships the documented defaults; override the same row by id in your profile's `cordis.patch.yml` (with `patchReload: live`, edits apply without a restart). Merging: `questions` and `routes` merge per key (override one entry, keep the rest); `profiles` deep-merge (tweak one threshold, keep the predicate); everything else follows ordinary deep-merge rules.
+Two surfaces, one source of truth. The **Plugins settings tab** (v0.2+) edits the top-level fields live: mode, provider preset, decision profile, triggers, log directory and turn-text switch, state cap, and the classifier endpoint group — edits reach the next turn **without a host restart**, and a rejected value keeps the previous good config. The **profile patch** remains the base layer for everything the card deliberately does not fake: profile thresholds (`effortMax`, `noulMax`, `probabilityMax`), `routeFor`/`routes`, custom `questions`, `delegationTools`.
+
+All settings live in the plugin row's `config`. The bundle patch ships the documented defaults; override the same row by id in your profile's `cordis.patch.yml` (edits there are the base layer the card rides on). Merging: `questions` and `routes` merge per key (override one entry, keep the rest); `profiles` deep-merge (tweak one threshold, keep the predicate); everything else follows ordinary deep-merge rules.
 
 | Key | Default | Meaning |
 |---|---|---|

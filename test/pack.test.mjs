@@ -32,6 +32,9 @@ test("packaging: the packed tarball ships every runtime module and loads", { tim
       "package/capabilities.mjs",
       "package/jev.mjs",
       "package/verdict.mjs",
+      "package/src/shared/config.mjs",
+      "package/src/host/index.js",
+      "package/lib/client.js",
       "package/cordis.patch.yml",
     ]) {
       assert.ok(files.has(required), `${required} must be in the tarball`);

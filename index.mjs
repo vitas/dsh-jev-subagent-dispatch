@@ -36,6 +36,7 @@ import { randomUUID } from "node:crypto";
 import { appendFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { PLUGIN_NAME, PLUGIN_SOURCE_KIND, resolveConfig } from "./config.mjs";
+import { installSettings } from "./src/host/index.js";
 import { checkDispatchCapabilities, routeAdviceFor } from "./capabilities.mjs";
 import { classify } from "./jev.mjs";
 import { buildState, decide, findTrigger, redact, renderUnavailableMessage, renderVerdictMessage } from "./verdict.mjs";
@@ -92,7 +93,7 @@ function summarizeMessages(messages, config) {
  * @param input - the `jev-subagent-dispatch` row's `config`.
  * @param deps - optional dependency overrides for tests.
  */
-export function apply(ctx, input = {}, deps = {}) {
+export async function apply(ctx, input = {}, deps = {}) {
   const { pluginMessage: buildMessage = pluginMessage } = deps;
   let config;
   try {
@@ -103,23 +104,22 @@ export function apply(ctx, input = {}, deps = {}) {
     ctx.logger.error(String(error));
     return;
   }
-  const logDir = loggingEnabled(config) ? config.logDir : null;
   const logger = ctx.logger;
   let warnedNoFactory = false;
-
-  if (config.mode === "off") {
-    // Opt-in starting point: register nothing, share nothing.
-    ctx.logger.info("jev-subagent-dispatch: mode off; not listening");
-    return;
-  }
 
   // prepend: this listener runs after downstream listeners have produced
   // their decision, so it sees the final claimed batch and appends its
   // message last — the same etiquette the memory plugins use, so the
   // routing verdict sits below recall context in the turn.
+  //
+  // The listener registers in EVERY mode: `off` exits below before any work
+  // (one field read per turn — no classification, no data sharing), and a
+  // mode changed from the settings UI reaches the next turn without a host
+  // restart, because `config` is the live object the settings bridge rewrites.
   ctx.on("agent/pre-step", async ({ agent, messages, signal }, next) => {
     const decision = await next();
     try {
+      if (config.mode === "off") return decision; // silent by default, zero cost
       if (decision?.kind !== "enter" || signal?.aborted) return decision;
       if (config.skipSubagentSessions && agent?.session?.header?.origin === "subagent") return decision;
 
@@ -143,8 +143,8 @@ export function apply(ctx, input = {}, deps = {}) {
         // line) saying what is missing.
         if (trigger === null) return decision;
         const reason = capabilities.missing.join("; ");
-        if (logDir !== null) {
-          await logVerdict(logDir, {
+        if (loggingEnabled(config)) {
+          await logVerdict(config.logDir, {
             at: new Date().toISOString(),
             session: agent?.session?.id ?? null,
             mode: config.mode,
@@ -198,8 +198,8 @@ export function apply(ctx, input = {}, deps = {}) {
         logger.warn?.("jev-subagent-dispatch: @deepseek-ai/dsh-llm is unavailable; skipping injection instead of fabricating a message");
       }
 
-      if (logDir !== null) {
-        await logVerdict(logDir, {
+      if (loggingEnabled(config)) {
+        await logVerdict(config.logDir, {
           at: new Date().toISOString(),
           id: randomUUID(),
           session: agent?.session?.id ?? null,
@@ -229,6 +229,17 @@ export function apply(ctx, input = {}, deps = {}) {
       return decision;
     }
   }, { prepend: true });
+
+  // The settings UI bridge: installs the `jev-subagent-dispatch` section and
+  // rewrites `config` in place on every edit, so card changes reach the next
+  // turn without a restart. Best effort — without the settings seam (or the
+  // schemastery peer) the profile patch stays the whole configuration.
+  try {
+    await installSettings(ctx, config, input, resolveConfig, logger);
+  } catch (error) {
+    logger.debug?.(`jev-subagent-dispatch: settings UI bridge unavailable — ${String(error?.message ?? error)}`);
+  }
+  logger.info(`jev-subagent-dispatch: listening (mode: ${config.mode})`);
 }
 
 export default apply;
