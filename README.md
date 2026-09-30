@@ -25,7 +25,7 @@ The injection is **advice, not enforcement**: the main agent weighs it and can i
 
 *Delegated* is the shipped `auto` profile. The stricter `careful` profile delegates only `mechanical`, and the predicate's ceilings (effort, blast radius, per-question probabilities) can hold any class back regardless of its role.
 
-![One model select per role, each offering the models your Subagent allowlist permits](docs/settings-routes.png)
+![One model select per role, each offering the models your Subagent allowlist permits](https://raw.githubusercontent.com/vitas/dsh-jev-subagent-dispatch/main/docs/settings-routes.png)
 
 Roles name the worker, classes name the work. `routeFor` maps a class to a role and `routes` maps a role to a model, so you can add a role, or point an existing one at a different model, without touching the rubric. `junior` exists because `mechanical` and `bugfix` are delegated together but are not one job — a rename has an unambiguous spec, a bug fix has to find the cause first — and it is the role to point at your cheapest model.
 
@@ -184,7 +184,7 @@ Set `mock: true` in the plugin row config. The mock classifier answers from keyw
 
 ## Settings
 
-![The plugin's own configuration page: every field edits the live config](docs/settings-card.png)
+![The plugin's own configuration page: every field edits the live config](https://raw.githubusercontent.com/vitas/dsh-jev-subagent-dispatch/main/docs/settings-card.png)
 
 Two surfaces, one source of truth. The plugin's **own page under Plugins** (DSH 0.1.7+, where the form renders inline on the package page; the row's **Configure** control opens the same form) — or the **Plugins settings tab** on 0.1.5 — edits the top-level fields live: mode, provider preset, decision profile, triggers, routes, log directory and turn-text switch, state cap, and the classifier endpoint group — edits reach the next turn **without a host restart**, and a rejected value keeps the previous good config. Routes are here because they are the one nested field that fails quietly: a route naming a model your Subagent allowlist forbids still classifies, so the verdict reads as healthy while there is nowhere to dispatch. The card reads that allowlist from the `subagent-model-selection-settings` namespace — another plugin's, bound through `configForms.get`, which the framework documents for exactly this — and offers its models as one select per role, so the mistake is not available to make. Where that namespace is not served, the raw `role=provider/model` field returns unchanged. The **profile patch** remains the base layer for everything the card deliberately does not fake: profile thresholds (`effortMax`, `noulMax`, `probabilityMax`), `routeFor`, custom `questions`, `delegationTools`.
 

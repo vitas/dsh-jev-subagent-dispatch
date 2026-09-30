@@ -1,6 +1,14 @@
 {
   "name": "dsh-jev-subagent-dispatch",
   "version": "0.7.3",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vitas/dsh-jev-subagent-dispatch.git"
+  },
+  "bugs": {
+    "url": "https://github.com/vitas/dsh-jev-subagent-dispatch/issues"
+  },
+  "homepage": "https://github.com/vitas/dsh-jev-subagent-dispatch#readme",
   "description": "Cut LLM costs: route routine tasks to cheap subagent models (DeepSeek Harness plugin)",
   "license": "MIT",
   "type": "module",
