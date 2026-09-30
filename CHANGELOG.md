@@ -4,6 +4,25 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 semantic versioning.
 
+## [0.7.3] - 2026-09-30
+
+### Fixed
+
+- **The card could show an empty configuration.** A profile patch that addresses
+  this plugin's row by id *replaces* the row config the bundle layer inserted —
+  the two do not merge. So for anyone who had ever edited the plugin from the card,
+  the stored row was the handful of fields the card wrote, and everything else was
+  missing: no route rows at all (hence no model selects), and `triggers` collapsed
+  to `[]`. The row's `Config` schema now declares the shipped defaults, so the
+  settings surface always describes a complete configuration. A regression test
+  builds the schema and asserts it.
+- `Key environment variable` was a dropdown listing the *provider* ids — `bai`,
+  `openrouter`, `typesafe` — where a variable name belongs. It is free text now,
+  with the provider preset's variable name as its placeholder.
+- `Endpoint`, `API path` and `Model` showed as blank when they were inherited from
+  the provider preset. They now show the inherited value as a placeholder, because
+  empty there means "take it from the preset" rather than "unset".
+
 ## [0.7.2] - 2026-09-30
 
 ### Added

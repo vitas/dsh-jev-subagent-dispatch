@@ -166,7 +166,7 @@ The key's **issuer** determines the endpoint, the API path, the credential varia
 | OpenRouter | `openrouter` | `https://openrouter.ai/api/v1/systemone` | `jev-1.13` | `OPENROUTER_API_KEY` |
 | TypeSafe | `typesafe` (default) | `https://api.typesafe.ai/v1/systemone` | `jev-1.13.0` | `TYPESAFE_API_KEY` |
 
-B.AI's Decisions API and OpenRouter's System One API both return typed Jev answers in the same shape; the plugin sends the identical rubric and applies the identical policy regardless of provider. Explicit `endpoint`, `apiPath`, `apiKeyEnv`, or `model` values in the row config override the preset — so a self-hosted or proxied Jev endpoint needs only those four strings. If your key came from B.AI, set `provider: bai` and you are done.
+B.AI's Decisions API and OpenRouter's System One API both return typed Jev answers in the same shape; the plugin sends the identical rubric and applies the identical policy regardless of provider. Explicit `endpoint`, `apiPath`, `apiKeyEnv`, or `model` values in the row config override the preset — so a self-hosted or proxied Jev endpoint needs only those four strings. If your key came from B.AI, set `provider: bai` and you are done. An inherited value stays blank in the card, which shows the preset's value as that field's placeholder — blank means "take it from the preset", not "unset".
 
 ## Install
 

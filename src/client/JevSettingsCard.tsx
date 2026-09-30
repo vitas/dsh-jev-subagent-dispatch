@@ -14,7 +14,7 @@
  */
 import * as React from 'react'
 import { useCallback, useState, useSyncExternalStore } from 'react'
-import { PACKAGE_NAME } from '../shared/config.mjs'
+import { PACKAGE_NAME, PROVIDER_PRESETS } from '../shared/config.mjs'
 import { localeRevision, subscribeLocale, tr } from './i18n.js'
 import type { JevScope, JevSettings, SubagentAllowlist } from './types.js'
 
@@ -23,7 +23,11 @@ const MODES = [
   { id: 'once', labelKey: 'modeOnce' as const },
   { id: 'auto', labelKey: 'modeAuto' as const },
 ]
-const PROVIDERS = ['bai', 'openrouter', 'typesafe']
+/**
+ * The same table the host resolves against, imported rather than repeated: the
+ * card offers these preset ids *and* previews what each one supplies below.
+ */
+const PROVIDERS = Object.keys(PROVIDER_PRESETS)
 const PROFILES = ['auto', 'careful']
 
 const inputStyle: React.CSSProperties = {
@@ -107,6 +111,12 @@ function Field(props: {
   onCommit: (parsed: unknown) => void
   onReset: () => void
   monospace?: boolean
+  /**
+   * Shown when the field is empty, and empty is a real state here: for the
+   * endpoint group it means "inherit from the provider preset". Without the
+   * hint an inherited value looks like a missing one.
+   */
+  placeholder?: string
 }) {
   const [draft, setDraft] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -139,6 +149,7 @@ function Field(props: {
         style={{ ...inputStyle, ...(props.monospace ? { fontFamily: 'var(--dsw-alias-font-mono, monospace)' } : {}) }}
         value={shown}
         disabled={props.disabled}
+        placeholder={props.placeholder}
         onChange={(e) => setDraft(e.target.value)}
         onBlur={commit}
         onKeyDown={(e) => { if (e.key === 'Enter') commit() }}
@@ -242,6 +253,12 @@ export function JevSettingsCard(props: { scope: JevScope; allowlist?: JevScope; 
   const subagentMissing = props.subagent !== undefined && subagentSnap.status === 'unavailable'
   const [pending, setPending] = useState(0)
   const value: JevSettings = snap.value ?? {}
+  /**
+   * What the chosen provider preset supplies. An empty endpoint/model field means
+   * "take it from here", so the card shows it as a placeholder rather than leaving
+   * four blanks that look like missing configuration.
+   */
+  const preset = PROVIDER_PRESETS[(value.provider as keyof typeof PROVIDER_PRESETS) ?? 'typesafe'] ?? {}
   const writable = snap.writable !== false && snap.status === 'ready'
   const disabled = !writable
   const showHeading = props.heading !== false
@@ -417,23 +434,30 @@ export function JevSettingsCard(props: { scope: JevScope; allowlist?: JevScope; 
       <div style={groupStyle}>
         <p style={headStyle}>{tr('advanced')}</p>
         <p style={{ ...hintStyle, marginTop: -4, marginBottom: 8 }}>{tr('advancedHint')}</p>
-        <Choice
+        {/* An environment variable *name*, so free text -- the preset supplies the
+            usual one as a placeholder. It used to be a Choice over the provider
+            ids, which offered `bai` / `openrouter` / `typesafe` as if those were
+            variable names. */}
+        <Field
           id="jev-apikeyenv" label={tr('apiKeyEnv')} hint={tr('apiKeyEnvHint')}
-          options={PROVIDERS.map((id) => ({ id, label: id }))}
-          value={value.apiKeyEnv ?? 'OPENROUTER_API_KEY'} overridden={overridden('apiKeyEnv')} disabled={disabled}
-          onCommit={(next) => commit('apiKeyEnv', next)} onReset={() => reset('apiKeyEnv')}
+          value={value.apiKeyEnv ?? ''} placeholder={preset.apiKeyEnv}
+          overridden={overridden('apiKeyEnv')} disabled={disabled} monospace
+          parse={trimmed} onCommit={(parsed) => commit('apiKeyEnv', parsed)} onReset={() => reset('apiKeyEnv')}
         />
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
           <Field
-            id="jev-endpoint" label={tr('endpoint')} value={value.endpoint ?? ''} overridden={overridden('endpoint')} disabled={disabled}
+            id="jev-endpoint" label={tr('endpoint')} value={value.endpoint ?? ''} placeholder={preset.endpoint}
+            overridden={overridden('endpoint')} disabled={disabled}
             parse={trimmed} onCommit={(parsed) => commit('endpoint', parsed)} onReset={() => reset('endpoint')} monospace
           />
           <Field
-            id="jev-apipath" label={tr('apiPath')} value={value.apiPath ?? ''} overridden={overridden('apiPath')} disabled={disabled}
+            id="jev-apipath" label={tr('apiPath')} value={value.apiPath ?? ''} placeholder={preset.apiPath}
+            overridden={overridden('apiPath')} disabled={disabled}
             parse={trimmed} onCommit={(parsed) => commit('apiPath', parsed)} onReset={() => reset('apiPath')} monospace
           />
           <Field
-            id="jev-model" label={tr('model')} value={value.model ?? ''} overridden={overridden('model')} disabled={disabled}
+            id="jev-model" label={tr('model')} value={value.model ?? ''} placeholder={preset.model}
+            overridden={overridden('model')} disabled={disabled}
             parse={trimmed} onCommit={(parsed) => commit('model', parsed)} onReset={() => reset('model')} monospace
           />
           <Field

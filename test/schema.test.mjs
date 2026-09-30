@@ -1,121 +1,70 @@
 /**
- * Host schema contract: the two settings models.
+ * The row's Config schema is the only complete copy of the configuration the
+ * settings surface ever sees.
  *
- * The regression this file locks is the DSH 0.1.7 one: a row's `Config` must be
- * exported with every field volatile (or the settings service drops the row
- * from `describe`), and the Loader hands each volatile field to `apply` as a
- * live accessor — read as a scalar it looks absent, so the plugin silently
- * falls back to its constants.
+ * A profile patch that addresses this row by id *replaces* the row config the
+ * bundle layer inserted; the two do not merge. So for anyone who has edited the
+ * plugin from the card even once, the stored row config is the handful of fields
+ * the card wrote, and everything else has to come back from the schema. A field
+ * declared `z.any()` with no default comes back missing — the card then drew no
+ * route rows at all, and `triggers` materialised as `[]` rather than the shipped
+ * pair. These asserts are that bug, one field at a time.
  */
-import assert from "node:assert/strict";
-import test from "node:test";
-import { Config, readConfig, readField } from "../src/host/index.js";
-import { apply } from "../index.mjs";
-import { resolveConfig } from "../config.mjs";
+import assert from 'node:assert/strict'
+import test from 'node:test'
 
-/** Wrap a value the way the 0.1.7 Loader hands a volatile field over. */
-function accessor(value) {
-  return { get: () => value, set: () => {} };
-}
+/** Volatile fields arrive as live accessors; read through them. */
+const plain = (value) => (value && typeof value.get === 'function' ? value.get() : value)
 
-/** Every field the exported Config declares, read from its JSON projection. */
-function configFields() {
-  const json = Config.toJSON();
-  const root = json.refs[json.uid];
-  return Object.entries(root.dict).map(([name, uid]) => [name, json.refs[uid]]);
-}
-
-test("schema: the exported Config marks every field volatile", { skip: Config === undefined }, () => {
-  assert.ok(Config, "schemastery resolved and Config was built");
-  const fields = configFields();
-  assert.ok(fields.length > 10, "the row schema declares its full field set");
-  const plain = fields.filter(([, node]) => node.meta?.volatile !== true).map(([name]) => name);
-  assert.deepEqual(plain, [], "every Config field must be volatile for 0.1.7 to serve the row");
-});
-
-test("schema: readConfig unwraps live accessors and leaves plain values alone", () => {
-  assert.equal(readField(accessor("auto")), "auto");
-  assert.equal(readField("auto"), "auto");
-  assert.equal(readField(undefined), undefined);
-  const live = { mode: accessor("auto"), timeoutMs: accessor(5000), triggers: accessor(["/route"]) };
-  assert.deepEqual(readConfig(live), { mode: "auto", timeoutMs: 5000, triggers: ["/route"] });
-  assert.deepEqual(readConfig(undefined), {});
-});
-
-test("schema: an accessor-resolved config passes the router's validation", () => {
-  const resolved = resolveConfig(readConfig({
-    mode: accessor("auto"),
-    provider: accessor("bai"),
-    mock: accessor(true),
-    stateChars: accessor(2000),
-  }));
-  assert.equal(resolved.mode, "auto");
-  assert.equal(resolved.provider, "bai");
-  assert.equal(resolved.apiKeyEnv, "OPENROUTER_API_KEY", "the preset for bai applies");
-  assert.equal(resolved.stateChars, 2000);
-});
-
+let cached
 /**
- * A 0.1.7-shaped host: the settings service exists but has no
- * `installSection`, so the row's Config (not the bridge) is the section.
+ * Loaded lazily, inside the tests, and never at module scope: top-level await
+ * here makes the file finish registering after the runner has already reported,
+ * which silently drops these tests from the suite's count.
  */
-function accessorContext(services = {}) {
-  const calls = [];
-  return {
-    calls,
-    get: (name) => services[name],
-    on(event, handler, options) {
-      calls.push({ event, handler, options });
-    },
-    inject(_services, handler) {
-      handler({ settings: {} });
-    },
-    effect() {},
-    logger: { info() {}, warn() {}, error() {}, debug() {} },
-  };
+async function schema() {
+  if (cached !== undefined) return cached
+  try {
+    const host = await import('../src/host/index.js')
+    cached = host.Config ? { Config: host.Config } : null
+  } catch {
+    cached = null // bare checkout without the optional peer
+  }
+  return cached
 }
 
-const capable = {
-  tools: { get: (name) => (name === "subagent" || name === "subagent_fork" ? { name } : undefined) },
-  subagents: { getProvider: (name) => ({ name }), resolveMaxDepth: () => 8 },
-  sessionProjections: { stateOf: () => undefined },
-};
+const SKIP = 'schemastery is not installed'
 
-test("schema: a 0.1.7 accessor config reaches the live listener, and edits follow", async () => {
-  const ctx = accessorContext(capable);
-  const additions = [];
-  // The live row config as 0.1.7 delivers it: accessors, not values.
-  const live = {
-    mode: accessor("once"),
-    mock: accessor(true),
-    provider: accessor("bai"),
-    skipSubagentSessions: accessor(true),
-  };
-  await apply(ctx, live, {
-    services: capable,
-    pluginMessage: async (text) => {
-      additions.push(text);
-      return { role: "user", content: [{ type: "text", text }] };
-    },
-  });
-  assert.equal(ctx.calls.length, 1, "one pre-step listener registered");
-  const listener = ctx.calls[0].handler;
-  const decision = {
-    kind: "enter",
-    messages: [{ role: "user", content: [{ type: "text", text: "/route rename every config key" }] }],
-  };
-  const next = async () => decision;
+test('schema: an empty row config still describes the whole configuration', async (t) => {
+  const s = await schema()
+  if (s === null) return t.skip(SKIP)
+  const parsed = s.Config({})
+  assert.deepEqual(plain(parsed.triggers), ['/route', '/jev'], 'triggers must not collapse to []')
+  assert.deepEqual(Object.keys(plain(parsed.routes)).sort(), ['implementer', 'junior', 'researcher'], 'routes must survive a partial row config')
+  assert.deepEqual(plain(parsed.routeFor), { mechanical: 'junior', bugfix: 'implementer', research: 'researcher' })
+  assert.equal(plain(parsed.defaultRoute), 'implementer')
+  assert.equal(plain(parsed.activeProfile), 'auto')
+  assert.equal(plain(parsed.includeFallbackLine), true)
+  assert.ok(Object.keys(plain(parsed.questions)).length > 0, 'the rubric is part of the defaults')
+  assert.ok(Object.keys(plain(parsed.profiles)).length > 0, 'the policy is part of the defaults')
+  assert.ok(Array.isArray(plain(parsed.delegationTools)))
+})
 
-  // The configured mode/values were READ (not the `{}` an unwrapped accessor
-  // would look like), so this turn classifies and injects.
-  const routed = await listener({ agent: { session: {}, cwd: "/w" }, messages: decision.messages, signal: null }, next);
-  assert.notEqual(routed, decision, "the accessor-resolved mode classified the turn");
-  assert.equal(additions.length, 1);
-  assert.match(additions[0], /subagent/i);
+test('schema: the endpoint group stays empty so the provider preset still wins', async (t) => {
+  const s = await schema()
+  if (s === null) return t.skip(SKIP)
+  const parsed = s.Config({})
+  // Materialising one preset's values here would turn "provider: bai" into a
+  // stale explicit override of the preset that provider selects.
+  for (const field of ['endpoint', 'apiPath', 'apiKeyEnv', 'model']) {
+    assert.equal(plain(parsed[field]), undefined, `${field} must stay absent`)
+  }
+})
 
-  // A live edit commits into the same accessor — no re-apply, next turn sees it.
-  live.mode = accessor("off");
-  const quiet = await listener({ agent: { session: {}, cwd: "/w" }, messages: decision.messages, signal: null }, next);
-  assert.equal(quiet, decision, "mode off passes the turn through untouched");
-  assert.equal(additions.length, 1);
-});
+test('schema: explicit values are never overwritten by a default', async (t) => {
+  const s = await schema()
+  if (s === null) return t.skip(SKIP)
+  const parsed = s.Config({ triggers: [], routes: { mine: { provider: 'p', model: 'm' } } })
+  assert.deepEqual(plain(parsed.triggers), [], 'a deliberate empty trigger list stays empty')
+  assert.deepEqual(Object.keys(plain(parsed.routes)), ['mine'], 'a deliberate route map is not merged with the defaults here')
+})

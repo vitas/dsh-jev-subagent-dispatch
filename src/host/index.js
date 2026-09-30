@@ -29,9 +29,45 @@
  */
 
 import { MODES, PLUGIN_NAME, PROVIDER_PRESETS } from "../shared/config.mjs";
+import { defaults } from "../../config.mjs";
 
 /** Provider preset ids, in the order the schema accepts them. */
 const PRESET_IDS = Object.keys(PROVIDER_PRESETS);
+
+/**
+ * The shipped defaults, taken from the resolver's own `defaults()` so the schema
+ * and the runtime cannot drift apart.
+ *
+ * These have to be declared *here*, in the schema, because this is the only copy
+ * of them the settings surface ever sees. A profile patch that addresses this row
+ * by id replaces the row config the bundle layer inserted — the two do not merge —
+ * so for anyone who has ever edited this plugin from the card, the row config is
+ * exactly the handful of fields the card wrote. Everything else has to come back
+ * from the schema, and a field declared `z.any()` with no default comes back
+ * missing: the card then draws no route rows at all, and `triggers` (an array with
+ * no default) materialises as `[]`.
+ *
+ * The endpoint group is deliberately left without defaults: an empty
+ * `endpoint`/`apiPath`/`apiKeyEnv`/`model` means "use the provider preset", and
+ * materialising one preset's values into the row would turn a provider choice into
+ * a stale explicit override.
+ *
+ * @returns a fresh copy, so no two schema builds share mutable defaults.
+ */
+function shipped() {
+  const d = defaults();
+  return {
+    activeProfile: d.activeProfile,
+    triggers: structuredClone(d.triggers),
+    questions: structuredClone(d.questions),
+    profiles: structuredClone(d.profiles),
+    routeFor: structuredClone(d.routeFor),
+    defaultRoute: d.defaultRoute,
+    routes: structuredClone(d.routes),
+    delegationTools: structuredClone(d.delegationTools),
+    includeFallbackLine: d.includeFallbackLine,
+  };
+}
 
 /**
  * Build the row schema, optionally marking every field volatile.
@@ -43,12 +79,13 @@ const PRESET_IDS = Object.keys(PROVIDER_PRESETS);
 function makeSchema(z, volatile) {
   /** Apply the volatile marker where the schema type supports it. */
   const mark = (schema) => (volatile && typeof schema.volatile === "function" ? schema.volatile() : schema);
+  const d = shipped();
   return z.object({
     // --- card surface ----------------------------------------------------
     mode: mark(z.union(MODES.map((id) => z.const(id))).default("off")),
     provider: mark(z.union(PRESET_IDS.map((id) => z.const(id))).default("typesafe")),
-    activeProfile: mark(z.string()),
-    triggers: mark(z.array(z.string())),
+    activeProfile: mark(z.string().default(d.activeProfile)),
+    triggers: mark(z.array(z.string()).default(d.triggers)),
     stateChars: mark(z.number().step(1).min(200).max(8000).default(1200)),
     timeoutMs: mark(z.number().step(1).min(50).max(30000).default(900)),
     logDir: mark(z.string()),
@@ -59,16 +96,18 @@ function makeSchema(z, volatile) {
     apiKeyEnv: mark(z.string()),
     model: mark(z.string()),
     // --- profile-patch surface, carried through unchanged -----------------
+    // Defaulted for the same reason as the card fields: the settings surface must
+    // still describe a complete configuration after a patch has replaced the row's.
     mock: mark(z.boolean().default(false)),
-    questions: mark(z.any()),
-    profiles: mark(z.any()),
-    routeFor: mark(z.any()),
-    defaultRoute: mark(z.string()),
-    routes: mark(z.any()),
-    delegationTools: mark(z.any()),
+    questions: mark(z.any().default(d.questions)),
+    profiles: mark(z.any().default(d.profiles)),
+    routeFor: mark(z.any().default(d.routeFor)),
+    defaultRoute: mark(z.string().default(d.defaultRoute)),
+    routes: mark(z.any().default(d.routes)),
+    delegationTools: mark(z.any().default(d.delegationTools)),
     skipSubagentSessions: mark(z.boolean().default(true)),
     redactPatterns: mark(z.array(z.string())),
-    includeFallbackLine: mark(z.boolean()),
+    includeFallbackLine: mark(z.boolean().default(d.includeFallbackLine)),
   });
 }
 
