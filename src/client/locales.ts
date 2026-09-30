@@ -6,6 +6,7 @@ export type CopyKey =
   | 'provider' | 'profile' | 'profileHint'
   | 'endpoint' | 'apiPath' | 'apiKeyEnv' | 'apiKeyEnvHint' | 'model'
   | 'triggers' | 'triggersHint' | 'timeoutMs' | 'stateChars'
+  | 'routes' | 'routesHint'
   | 'logDir' | 'logDirHint' | 'logTurnText' | 'logTurnTextHint'
   | 'overridden' | 'reset' | 'saving' | 'unavailable'
   | 'advanced' | 'advancedHint'
@@ -27,6 +28,8 @@ export const en: Record<CopyKey, string> = {
   model: 'Classifier model',
   triggers: 'Request triggers',
   triggersHint: 'Comma-separated; only used in “On request” mode.',
+  routes: 'Routes',
+  routesHint: 'Comma-separated role=provider/model. Every model must be one your Subagent allowlist permits, or the verdict has nowhere to dispatch. Empty restores the shipped defaults.',
   timeoutMs: 'Call timeout (ms)',
   stateChars: 'State cap (chars)',
   logDir: 'Verdict log directory',
@@ -58,6 +61,8 @@ export const zh: Record<CopyKey, string> = {
   model: '分类器模型',
   triggers: '请求触发词',
   triggersHint: '逗号分隔；仅在“按请求”模式下使用。',
+  routes: '路由',
+  routesHint: '逗号分隔 role=provider/model。模型必须在子代理白名单内，否则判定结果无处可去。留空恢复默认值。',
   timeoutMs: '调用超时（毫秒）',
   stateChars: '状态上限（字符）',
   logDir: '判定日志目录',
@@ -89,6 +94,8 @@ export const ru: Record<CopyKey, string> = {
   model: 'Модель классификатора',
   triggers: 'Триггеры запроса',
   triggersHint: 'Через запятую; используются только в режиме «По запросу».',
+  routes: 'Маршруты',
+  routesHint: 'Через запятую: роль=провайдер/модель. Модель должна быть в вашем списке разрешённых для субагентов, иначе вердикту некуда вести. Пусто — вернуть значения по умолчанию.',
   timeoutMs: 'Тайм-аут вызова (мс)',
   stateChars: 'Лимит состояния (символов)',
   logDir: 'Каталог лога вердиктов',

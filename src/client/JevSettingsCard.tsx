@@ -5,9 +5,12 @@
  * Reads ride the framework describe-mirror via the bound settings scope; writes
  * go through the scope's revision-fenced `set`/`unset`, so this card and the
  * profile patch can never clobber each other. Deeper policy (profiles,
- * probabilityMax, routes) is deliberately NOT editable here — the card says so
- * and points at the profile patch. Built from plain React + design tokens to
- * respect DSH's client bundle-purity rule.
+ * probabilityMax, routeFor) is deliberately NOT editable here — the card says so
+ * and points at the profile patch. `routes` is the exception, because it is the
+ * one that fails silently: a route naming a model the Subagent allowlist
+ * forbids still classifies, so the verdict reads as healthy while there is
+ * nowhere to dispatch. Built from plain React + design tokens to respect DSH's
+ * client bundle-purity rule.
  */
 import * as React from 'react'
 import { useCallback, useState, useSyncExternalStore } from 'react'
@@ -229,6 +232,33 @@ export function JevSettingsCard(props: { scope: JevScope; heading?: boolean }) {
   }
   const optionalDir = (text: string) => text.trim()
 
+  /** Render routes as `role=provider/model` pairs, comma-separated. */
+  const routesText = (routes: JevSettings['routes']): string =>
+    Object.entries(routes ?? {})
+      .map(([role, target]) => `${role}=${[target?.provider, target?.model].filter(Boolean).join('/')}`)
+      .join(', ')
+  /**
+   * Parse those pairs back. An empty box returns null so the caller resets the
+   * field to the shipped defaults rather than pinning an empty map; a malformed
+   * entry rejects the whole commit and names its own shape in the error, which
+   * is what keeps a typo from silently stranding every verdict.
+   */
+  const parseRoutes = (text: string): Record<string, { provider: string; model: string }> | null => {
+    const entries = text.split(',').map((entry) => entry.trim()).filter((entry) => entry.length > 0)
+    if (entries.length === 0) return null
+    const parsed: Record<string, { provider: string; model: string }> = {}
+    for (const entry of entries) {
+      const eq = entry.indexOf('=')
+      const slash = eq === -1 ? -1 : entry.indexOf('/', eq + 1)
+      if (eq < 1 || slash < eq + 2 || slash === entry.length - 1) throw new Error('role=provider/model')
+      parsed[entry.slice(0, eq).trim()] = {
+        provider: entry.slice(eq + 1, slash).trim(),
+        model: entry.slice(slash + 1).trim(),
+      }
+    }
+    return parsed
+  }
+
   return (
     <div>
       {showHeading ? (
@@ -272,6 +302,14 @@ export function JevSettingsCard(props: { scope: JevScope; heading?: boolean }) {
         id="jev-triggers" label={tr('triggers')} hint={tr('triggersHint')}
         value={(value.triggers ?? []).join(', ')} overridden={overridden('triggers')} disabled={disabled}
         parse={list} onCommit={(parsed) => commit('triggers', parsed)} onReset={() => reset('triggers')}
+      />
+      <Field
+        id="jev-routes" label={tr('routes')} hint={tr('routesHint')}
+        value={routesText(value.routes)} overridden={overridden('routes')} disabled={disabled}
+        parse={parseRoutes} onCommit={(parsed) => {
+          if (parsed === null) reset('routes')
+          else commit('routes', parsed)
+        }} onReset={() => reset('routes')} monospace
       />
       <Toggle
         id="jev-logturn" label={tr('logTurnText')} hint={tr('logTurnTextHint')}

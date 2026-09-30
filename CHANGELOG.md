@@ -4,6 +4,27 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 semantic versioning.
 
+## [0.4.0] - 2026-09-30
+
+Routes are editable in the settings card. They were the one nested field the card
+left to the profile patch, which made a whole class of mistake invisible: a route
+naming a model your Subagent allowlist does not carry still classifies, so the
+verdict reads as healthy while there is nowhere to dispatch the task.
+
+### Added
+
+- A **Routes** field on the plugin's configuration card, written as
+  comma-separated `role=provider/model` — `implementer=openrouter/glm-5.3-flash`.
+  The value commits on Enter or blur, reaches the next turn without a host
+  restart, and clears back to the shipped pair when emptied.
+- Validation before the commit: a malformed entry reports `role=provider/model`,
+  keeps the previous good value, and cannot half-apply a route map.
+
+### Changed
+
+- `routes` is no longer a patch-only field; `routeFor`, `profiles`, `questions`
+  and `delegationTools` still are.
+
 ## [0.3.1] - 2026-09-30
 
 The configuration card now sits on the plugin's own page, the way the shipped

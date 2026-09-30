@@ -1029,3 +1029,42 @@ test("settings: a UI edit reaches the next turn without re-apply", async () => {
   assert.notEqual(still, decision);
   assert.equal(additions.length, 2);
 });
+
+test("settings: a routes edit reaches the next recommendation", async () => {
+  const ctx = fakeContext(capableServices());
+  const additions = [];
+  await apply(ctx, { mode: "once", mock: true, provider: "openrouter" }, {
+    services: capableServices(),
+    pluginMessage: async (text) => {
+      additions.push(text);
+      return { role: "user", content: [{ type: "text", text }] };
+    },
+  });
+  const listener = ctx.calls[0].handler;
+  let decision = { kind: "enter", messages: [] };
+  const next = async () => decision;
+  const turn = () => ({ agent: { session: {} }, messages: decision.messages, signal: null });
+  /** Start a turn with `text` as the user's message. */
+  const say = (text) => {
+    decision = { kind: "enter", messages: [{ role: "user", content: [{ type: "text", text }] }] };
+  };
+  say("/route rename the config keys everywhere");
+  await listener(turn(), next);
+  // The shipped implementer route names a model a profile allowlist need not carry.
+  assert.equal(additions.length, 1);
+  assert.match(additions[0], /deepseek-v4-flash/);
+  // Editing routes in the card must reach the next turn without a re-apply.
+  ctx.settingsSource({
+    mode: "once", mock: true, provider: "openrouter",
+    routes: { implementer: { provider: "openrouter", model: "glm-5.3-flash" } },
+  });
+  await listener(turn(), next);
+  assert.equal(additions.length, 2);
+  assert.match(additions[1], /glm-5\.3-flash/, "the edited route is recommended");
+  assert.doesNotMatch(additions[1], /deepseek-v4-flash/, "the shipped implementer route is replaced");
+  // Routes merge per key, so the untouched researcher route must survive.
+  say("/route research how the catalog is refreshed");
+  await listener(turn(), next);
+  assert.equal(additions.length, 3);
+  assert.match(additions[2], /qwen3\.8-flash/, "the untouched researcher route still applies");
+});

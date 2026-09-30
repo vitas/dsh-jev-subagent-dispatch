@@ -1,7 +1,11 @@
 /**
  * The `jev-subagent-dispatch` fields this card edits. Deeper policy
- * (profiles, probabilityMax, routeFor, routes) intentionally stays a
+ * (profiles, probabilityMax, routeFor) intentionally stays a
  * profile-patch surface — the card links to it instead of faking it.
+ *
+ * `routes` is here because it is the one nested field that fails silently:
+ * a route naming a model the Subagent allowlist forbids still classifies,
+ * so the verdict looks healthy while nothing can be dispatched.
  */
 export interface JevSettings {
   mode?: string
@@ -16,6 +20,7 @@ export interface JevSettings {
   logDir?: string
   logTurnText?: boolean
   activeProfile?: string
+  routes?: Record<string, { provider?: string; model?: string }>
 }
 
 /** Minimal slice of the framework settings scope this card consumes. */
