@@ -395,6 +395,6 @@ export function renderUnavailableMessage(missing) {
   return [
     "[jev-subagent-dispatch] Dispatch is unavailable in this session, so no Jev call was made. Missing:",
     ...(missing ?? []).map((item) => `- ${item}`),
-    "Check the subagent setup — the subagent service installed, its tools enabled for this session, and the depth limit in Settings → Subagent — then re-run the request.",
+    "Check the subagent setup — the Subagent plugin enabled under Plugins, its tools allowed for this session, and the depth limit in Settings → Subagent — then re-run the request.",
   ].join("\n");
 }

@@ -9,6 +9,7 @@ export type CopyKey =
   | 'routes' | 'routesHint' | 'routesPickHint'
   | 'logDir' | 'logDirHint' | 'logTurnText' | 'logTurnTextHint'
   | 'overridden' | 'reset' | 'saving' | 'unavailable'
+  | 'subagentMissing'
   | 'advanced' | 'advancedHint'
 
 export const en: Record<CopyKey, string> = {
@@ -41,6 +42,7 @@ export const en: Record<CopyKey, string> = {
   reset: 'reset',
   saving: 'saving…',
   unavailable: 'Settings are read-only here — edit the profile patch.',
+  subagentMissing: 'The Subagent plugin is not active, so a verdict would have nowhere to go. Enable it under Plugins — Jev still classifies, but nothing can be dispatched until it is on.',
   advanced: 'Classifier endpoint (advanced)',
   advancedHint: 'Preset values; edit only to point at a gateway the preset does not cover.',
 }
@@ -75,6 +77,7 @@ export const zh: Record<CopyKey, string> = {
   reset: '还原',
   saving: '保存中…',
   unavailable: '此处设置只读——请编辑 profile patch。',
+  subagentMissing: '子代理插件未启用，判定结果将无处可去。请在 Plugins 中启用它——Jev 仍会分类，但在此之前无法派发。',
   advanced: '分类器端点（高级）',
   advancedHint: '预设值；仅在预设未覆盖的网关时修改。',
 }
@@ -109,6 +112,7 @@ export const ru: Record<CopyKey, string> = {
   reset: 'сброс',
   saving: 'сохранение…',
   unavailable: 'Здесь настройки только для чтения — правьте profile patch.',
+  subagentMissing: 'Плагин Subagent не активен, поэтому вердикту некуда будет вести. Включите его в Plugins — Jev по-прежнему классифицирует, но передать задачу не сможет.',
   advanced: 'Endpoint классификатора (подробно)',
   advancedHint: 'Значения пресета; меняйте только для шлюза, которого пресет не покрывает.',
 }

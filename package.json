@@ -1,6 +1,6 @@
 {
   "name": "dsh-jev-subagent-dispatch",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Cut LLM costs: route routine tasks to cheap subagent models (DeepSeek Harness plugin)",
   "license": "MIT",
   "type": "module",

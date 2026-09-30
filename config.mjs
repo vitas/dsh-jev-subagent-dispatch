@@ -169,7 +169,22 @@ export const DEFAULT_PROFILES = {
   },
 };
 
+/**
+ * Named routes: role → the subagent model that should take it.
+ *
+ * Three roles, not two, because `mechanical` and `bugfix` are delegated together
+ * but are not the same job: a rename or a reformat has an unambiguous spec,
+ * while a bug fix has to find the cause first. Sharing one model meant paying
+ * the bug-fix price for renames. `refactor`, `feature_work` and `meta_chat` are
+ * deliberately absent from `profiles.*.delegate.taskClass`, so they never reach
+ * a route at all — they stay with the main agent.
+ *
+ * `mechanical` and `researcher` ship on the same model id; they are separate
+ * keys so a profile can point each at whatever its own allowlist permits, which
+ * the configuration card makes a two-click change.
+ */
 export const DEFAULT_ROUTES = {
+  mechanical: { provider: "openrouter", model: "qwen3.8-flash" },
   implementer: { provider: "openrouter", model: "deepseek-v4-flash" },
   researcher: { provider: "openrouter", model: "qwen3.8-flash" },
 };
@@ -235,7 +250,7 @@ export function defaults() {
     questions: structuredClone(DEFAULT_QUESTIONS),
     activeProfile: "auto",
     profiles: structuredClone(DEFAULT_PROFILES),
-    routeFor: { mechanical: "implementer", bugfix: "implementer", research: "researcher" },
+    routeFor: { mechanical: "mechanical", bugfix: "implementer", research: "researcher" },
     defaultRoute: "implementer",
     routes: structuredClone(DEFAULT_ROUTES),
     // Turn triggers for `once` mode (and preview requests in `auto`).

@@ -24,7 +24,7 @@ import * as React from 'react'
 import { JevSettingsCard } from './JevSettingsCard.js'
 import { bindTranslator, notifyLocale } from './i18n.js'
 import { en, zh, ru } from './locales.js'
-import { PACKAGE_NAME, PLUGIN_NAME, ROW_CONFIG_KEY, SETTINGS_NAMESPACE as NS, SUBAGENT_ALLOWLIST_NAMESPACE } from '../shared/config.mjs'
+import { PACKAGE_NAME, PLUGIN_NAME, ROW_CONFIG_KEY, SETTINGS_NAMESPACE as NS, SUBAGENT_ALLOWLIST_NAMESPACE, SUBAGENT_NAMESPACE } from '../shared/config.mjs'
 
 /** Register the copy dictionaries and bind the translator. */
 function wireLocale(ctx: any): void {
@@ -79,6 +79,10 @@ function registerRowConfig(ctx: any): void {
           // that plugin is absent the scope simply reports nothing and the card
           // keeps its raw field.
           allowlist: c.configForms.get(SUBAGENT_ALLOWLIST_NAMESPACE),
+          // Liveness probe for the delegation tools: a namespace the loader does
+          // not serve reports unavailable, and the card tells the user to enable
+          // the plugin instead of letting a verdict go quietly nowhere.
+          subagent: c.configForms.get(SUBAGENT_NAMESPACE),
           heading: false,
         })
 

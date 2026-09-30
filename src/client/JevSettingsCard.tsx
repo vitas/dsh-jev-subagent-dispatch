@@ -44,6 +44,12 @@ const segBtn = (active: boolean): React.CSSProperties => ({
   color: active ? '#fff' : 'inherit',
 })
 const errorStyle: React.CSSProperties = { fontSize: 11, color: 'var(--dsw-alias-text-danger, #e66)', marginTop: 4 }
+const warningStyle: React.CSSProperties = {
+  fontSize: 11, margin: '0 0 12px', padding: '8px 10px', borderRadius: 6,
+  border: '1px solid var(--dsw-alias-border-danger, #a33)',
+  background: 'var(--dsw-alias-bg-danger-subtle, rgba(200, 60, 60, 0.12))',
+  color: 'var(--dsw-alias-text-danger, #e66)',
+}
 const groupStyle: React.CSSProperties = { borderTop: '1px solid var(--dsw-alias-border-default, #333)', marginTop: 16, paddingTop: 10 }
 const headStyle: React.CSSProperties = { fontSize: 12, fontWeight: 700, margin: '0 0 8px', color: 'var(--dsw-alias-text-secondary, #aaa)' }
 
@@ -220,11 +226,15 @@ function Toggle(props: {
  * registration there passes `heading: false` rather than printing the title
  * twice.
  */
-export function JevSettingsCard(props: { scope: JevScope; allowlist?: JevScope; heading?: boolean }) {
+export function JevSettingsCard(props: { scope: JevScope; allowlist?: JevScope; subagent?: JevScope; heading?: boolean }) {
   useLocaleRevision()
   const snap = useScopeSnapshot(props.scope)
   const allowSnap = useScopeSnapshot(props.allowlist ?? NO_ALLOWLIST_SCOPE)
   const allowed = allowlistKeys(allowSnap.value)
+  // Only meaningful where the deployment actually exposes the probe: without a
+  // scope we say nothing rather than guess, so 0.1.5 never shows a false alarm.
+  const subagentSnap = useScopeSnapshot(props.subagent ?? NO_ALLOWLIST_SCOPE)
+  const subagentMissing = props.subagent !== undefined && subagentSnap.status === 'unavailable'
   const [pending, setPending] = useState(0)
   const value: JevSettings = snap.value ?? {}
   const writable = snap.writable !== false && snap.status === 'ready'
@@ -296,6 +306,8 @@ export function JevSettingsCard(props: { scope: JevScope; allowlist?: JevScope; 
       ) : pending > 0 ? (
         <p style={{ ...hintStyle, marginTop: 0 }}>{tr('saving')}</p>
       ) : null}
+
+      {subagentMissing && <p style={warningStyle} role="status">{tr('subagentMissing')}</p>}
 
       <div style={{ marginBottom: 12 }}>
         <span style={labelStyle}>{tr('mode')}</span>

@@ -226,8 +226,8 @@ test("verdict: delegate predicate passes a mechanical turn and picks the role", 
   const normalized = normalizeAnswers(documentedAnswers(), config.questions);
   const decision = decide({ answers: normalized, model: "jev-1.13.0", usage: { input_tokens: 360 } }, config);
   assert.equal(decision.action, "delegate");
-  assert.equal(decision.role, "implementer");
-  assert.deepEqual(decision.route, { provider: "openrouter", model: "deepseek-v4-flash" });
+  assert.equal(decision.role, "mechanical");
+  assert.deepEqual(decision.route, { provider: "openrouter", model: "qwen3.8-flash" });
   assert.deepEqual(decision.usage, { input_tokens: 360 });
 });
 
@@ -314,7 +314,7 @@ test("verdict: rendered message is a recommendation naming the route", () => {
   const text = renderVerdictMessage(decision, config);
   assert.match(text, /\[jev-subagent-dispatch\]/);
   assert.match(text, /recommendation/);
-  assert.match(text, /deepseek-v4-flash/);
+  assert.match(text, /role "mechanical" \u2192 provider openrouter, model qwen3\.8-flash/);
   assert.match(text, /M \(1\)/); // level label + numeric score
   assert.match(text, /subagent tool is unavailable/);
 });
@@ -407,7 +407,7 @@ test("host: a delegating verdict appends one source-attributed message", async (
   assert.equal(result.kind, "enter");
   assert.equal(result.messages.length, 2);
   assert.equal(result.messages[1].source.kind, "plugin:jev-subagent-dispatch");
-  assert.match(result.messages[1].content[0].text, /deepseek-v4-flash/);
+  assert.match(result.messages[1].content[0].text, /role "mechanical" \u2192 provider openrouter, model qwen3\.8-flash/);
 });
 
 test("host: a failing classification is fail-open (turn proceeds unrouted)", async () => {
@@ -466,7 +466,7 @@ test("host: logging is opt-in, excludes turn text by default, and records usage"
     assert.equal(line.action, "delegate");
     assert.equal(line.delivered, false); // factory unavailable → nothing was injected
     assert.match(line.id, /^[0-9a-f-]{36}$/); // ledger correlation id
-    assert.equal(line.role, "implementer");
+    assert.equal(line.role, "mechanical");
     assert.ok("usage" in line);
     assert.ok(!JSON.stringify(line).includes("sk-abcdefghijklmnop"));
   } finally {
@@ -535,7 +535,7 @@ test("host: mode once classifies an explicit /route request and injects", async 
   const result = await handler(turn, async () => ({ kind: "enter", messages: [...turn.messages] }));
   assert.equal(result.messages.length, 2);
   assert.match(result.messages[1].content[0].text, /Dispatch recommendation/);
-  assert.match(result.messages[1].content[0].text, /deepseek-v4-flash/);
+  assert.match(result.messages[1].content[0].text, /role "mechanical" \u2192 provider openrouter, model qwen3\.8-flash/);
 });
 
 test("host: preview requests render evaluation-only advice", async () => {
@@ -950,15 +950,15 @@ test("advice: a custom-named fork tool is recognized by its provider", () => {
 test("replay: route-only changes are counted separately", async () => {
   const { replayRecord } = await import("../replay.mjs");
   const answers = normalizeAnswers(documentedAnswers(), config.questions);
-  const record = { id: "id-1", action: "delegate", role: "implementer", route: { provider: "openrouter", model: "deepseek-v4-flash" }, answers, model: "m" };
-  // candidate maps mechanical → researcher: same action, different child
-  const candidate = { ...config, routeFor: { ...config.routeFor, mechanical: "researcher" } };
+  const record = { id: "id-1", action: "delegate", role: "mechanical", route: { provider: "openrouter", model: "qwen3.8-flash" }, answers, model: "m" };
+  // candidate maps mechanical → implementer: same action, different child
+  const candidate = { ...config, routeFor: { ...config.routeFor, mechanical: "implementer" } };
   const result = replayRecord(record, candidate);
   assert.equal(result.actionChanged, false);
   assert.equal(result.routeChanged, true);
   assert.equal(result.changed, true);
-  assert.equal(result.fromRoute, "implementer@openrouter/deepseek-v4-flash");
-  assert.equal(result.toRoute, "researcher@openrouter/qwen3.8-flash");
+  assert.equal(result.fromRoute, "mechanical@openrouter/qwen3.8-flash");
+  assert.equal(result.toRoute, "implementer@openrouter/deepseek-v4-flash");
   // unchanged when role and route match
   const same = replayRecord(record, config);
   assert.equal(same.changed, false);
@@ -1050,21 +1050,32 @@ test("settings: a routes edit reaches the next recommendation", async () => {
   };
   say("/route rename the config keys everywhere");
   await listener(turn(), next);
-  // The shipped implementer route names a model a profile allowlist need not carry.
+  // The shipped mechanical route names a model a profile allowlist need not carry.
   assert.equal(additions.length, 1);
-  assert.match(additions[0], /deepseek-v4-flash/);
+  assert.match(additions[0], /role "mechanical" .* model qwen3\.8-flash/);
   // Editing routes in the card must reach the next turn without a re-apply.
   ctx.settingsSource({
     mode: "once", mock: true, provider: "openrouter",
-    routes: { implementer: { provider: "openrouter", model: "glm-5.3-flash" } },
+    routes: { mechanical: { provider: "openrouter", model: "glm-5.3-flash" } },
   });
   await listener(turn(), next);
   assert.equal(additions.length, 2);
   assert.match(additions[1], /glm-5\.3-flash/, "the edited route is recommended");
-  assert.doesNotMatch(additions[1], /deepseek-v4-flash/, "the shipped implementer route is replaced");
+  assert.doesNotMatch(additions[1], /qwen3\.8-flash/, "the shipped mechanical route is replaced");
   // Routes merge per key, so the untouched researcher route must survive.
   say("/route research how the catalog is refreshed");
   await listener(turn(), next);
   assert.equal(additions.length, 3);
-  assert.match(additions[2], /qwen3\.8-flash/, "the untouched researcher route still applies");
+  assert.match(additions[2], /role "researcher" .* model qwen3\.8-flash/, "the untouched researcher route still applies");
+});
+
+test("verdict: bugfix maps to the implementer route, not to the mechanical one", () => {
+  // The keyword mock cannot answer `bugfix`, so this mapping is asserted on the
+  // decision itself — which is also the only way to reach the implementer role.
+  const answers = documentedAnswers();
+  answers.answers.task_class = { type: "choice", choice: "bugfix", probabilities: null, confidence: 0.9 };
+  const decision = decide({ answers: normalizeAnswers(answers, config.questions), model: "jev-1.13.0" }, config);
+  assert.equal(decision.action, "delegate");
+  assert.equal(decision.role, "implementer");
+  assert.deepEqual(decision.route, { provider: "openrouter", model: "deepseek-v4-flash" });
 });

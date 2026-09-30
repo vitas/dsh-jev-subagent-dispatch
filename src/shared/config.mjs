@@ -44,6 +44,19 @@ export const ROW_CONFIG_KEY = `${PACKAGE_NAME}#${PLUGIN_NAME}`
  */
 export const SUBAGENT_ALLOWLIST_NAMESPACE = 'subagent-model-selection-settings'
 
+/**
+ * The Subagent plugin's own settings namespace.
+ *
+ * The card reads it purely as a liveness probe: `configForms` reports an
+ * unserved namespace as unavailable, and the loader serves a row's namespace
+ * only while that row is composed and enabled. So an unavailable one here means
+ * the delegation tools are very likely absent — the same condition
+ * `checkDispatchCapabilities` refuses to route under — and the card can say so
+ * before a turn is ever attempted. It is a probe, not the authority: only the
+ * runtime check sees the session's own tool visibility.
+ */
+export const SUBAGENT_NAMESPACE = 'subagent'
+
 /** Activation modes. `off` classifies nothing; the listener stays quiet. */
 export const MODES = ['off', 'once', 'auto']
 

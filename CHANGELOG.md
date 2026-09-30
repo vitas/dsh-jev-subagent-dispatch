@@ -4,6 +4,32 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 semantic versioning.
 
+## [0.6.0] - 2026-09-30
+
+Two answers to "what if the setup is wrong, and what if the job is simple".
+
+### Added
+
+- The card warns when the Subagent plugin is not active, reading its settings
+  namespace as a liveness probe: the loader serves a row's namespace only while
+  that row is composed, so a missing one means the delegation tools are very
+  likely absent — the state a user would otherwise discover as a verdict with
+  nowhere to go. Verified against a profile with the plugin disabled: the warning
+  appears, and the allowlist-driven selects keep working, because the two
+  namespaces come from different plugins.
+- `mechanical` becomes a third role. `mechanical` and `bugfix` are delegated
+  together but are not the same job — a rename has an unambiguous spec, a bug fix
+  has to find the cause — and sharing one model meant paying the bug-fix price
+  for renames.
+
+### Changed
+
+- The unavailable diagnostic and the log line name the plugin and point at
+  Plugins; the log is a warning, since a turn that quietly never routed is not
+  info.
+- `refactor`, `feature_work` and `meta_chat` remain undelegated by design: they
+  are absent from `profiles.*.delegate.taskClass`, so they never reach a route.
+
 ## [0.5.0] - 2026-09-30
 
 Choosing a route is now a choice, not a spelling test. Each role gets its own

@@ -27,6 +27,8 @@ For a dispatch plugin, calling Jev before knowing whether the agent can delegate
 
 Changes to session or plugin setup take effect on the next request — nothing is cached from boot.
 
+The settings card carries a lighter, earlier version of the same check: it reads the Subagent plugin's own settings namespace, which the loader serves only while that row is composed and enabled, and shows a warning when it is gone. That catches the one case you would otherwise meet as a verdict with nowhere to go — a profile where the plugin was never enabled. It is a probe, not the authority: only the request-time check above sees the session's tool visibility, which is why a missing namespace warns while a depth-limited or tool-disabled session still reports itself through the diagnostic message.
+
 ## Modes: Jev runs when you ask, not on every turn
 
 The default is `off` — nothing is registered, nothing is shared. Three activation models, cheapest first:
@@ -182,7 +184,7 @@ All settings live in the plugin row's `config`. The bundle patch ships the docum
 | `profiles` | `auto`, `careful` | `{ confidenceMin, delegate }` predicates |
 | `routeFor` | class → role | which named route a task class maps to |
 | `defaultRoute` | `implementer` | fallback role when the class has no mapping |
-| `routes` | two flash routes | `role → { provider, model }`; mirror your Subagent allowlist. The card shows one select per role, limited to the models that allowlist permits; without that namespace it falls back to comma-separated `role=provider/model`, where clearing the box restores the shipped pair |
+| `routes` | three routes | `role → { provider, model }`; mirror your Subagent allowlist. The card shows one select per role, limited to the models that allowlist permits; without that namespace it falls back to comma-separated `role=provider/model`, where clearing the box restores the shipped triple |
 | `skipSubagentSessions` | `true` | only main-agent turns are routed |
 | `logDir` | `null` | NDJSON verdict sink; **`null` or `""` disables logging**; set a directory path to opt in |
 | `logTurnText` | `false` | when logging is on, include the (redacted) turn text in the log |

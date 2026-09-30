@@ -174,11 +174,18 @@
                 user_explicit: 0.1
                 risky: 0.05
         routeFor:
-          mechanical: implementer
+          mechanical: mechanical
           bugfix: implementer
           research: researcher
         defaultRoute: implementer
+        # Three routes, because `mechanical` and `bugfix` are delegated together
+        # but are not one job: a rename has an unambiguous spec, a bug fix has to
+        # find the cause first. Point `mechanical` at the cheapest model your
+        # Subagent allowlist permits — the configuration card lists exactly those.
         routes:
+          mechanical:
+            provider: openrouter
+            model: qwen3.8-flash
           implementer:
             provider: openrouter
             model: deepseek-v4-flash

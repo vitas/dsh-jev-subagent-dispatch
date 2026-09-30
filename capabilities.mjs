@@ -65,7 +65,7 @@ export function checkDispatchCapabilities(services, agent, delegationTools = DEL
     tools?.get !== undefined && tryCall(() => tools.get(toolName, agent)) !== undefined
   ));
   if (visible.length === 0) {
-    missing.push("no delegation tool is visible to this agent (the subagent service is not installed, or its tools are disabled for this session)");
+    missing.push("no delegation tool is visible to this agent (the Subagent plugin is not active in this profile, or its tools are disabled for this session)");
   }
 
   if (subagents === undefined) {

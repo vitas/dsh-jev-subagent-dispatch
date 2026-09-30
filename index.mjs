@@ -197,7 +197,7 @@ export async function apply(ctx, input = {}, deps = {}) {
             reason,
           }, logger);
         }
-        logger.info?.(`jev-subagent-dispatch: dispatch unavailable — ${reason}`);
+        logger.warn?.(`jev-subagent-dispatch: dispatch unavailable — ${reason}`);
         const addition = await buildMessage(renderUnavailableMessage(capabilities.missing));
         return addition === null ? decision : { ...decision, messages: [...decision.messages, addition] };
       }
