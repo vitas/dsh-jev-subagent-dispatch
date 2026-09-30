@@ -66,7 +66,7 @@
     "typesafe"
   ],
   "bin": {
-    "jev-replay": "./bin/jev-replay.mjs"
+    "jev-replay": "bin/jev-replay.mjs"
   },
   "peerDependencies": {
     "@deepseek-ai/schemastery": ">=3.18.1",
