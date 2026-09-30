@@ -38,8 +38,8 @@ import { join } from "node:path";
 import { PLUGIN_NAME, PLUGIN_SOURCE_KIND, resolveConfig } from "./config.mjs";
 import { installSettings, readConfig } from "./src/host/index.js";
 import { checkDispatchCapabilities, routeAdviceFor } from "./capabilities.mjs";
-import { classify } from "./jev.mjs";
-import { buildState, decide, findTrigger, redact, renderUnavailableMessage, renderVerdictMessage } from "./verdict.mjs";
+import { classify, resolveApiKeyFrom } from "./jev.mjs";
+import { buildState, decide, findTrigger, redact, renderErrorMessage, renderUnavailableMessage, renderVerdictMessage } from "./verdict.mjs";
 
 export const name = PLUGIN_NAME;
 
@@ -150,6 +150,12 @@ export async function apply(ctx, input = {}, deps = {}) {
     }
   };
 
+  /**
+   * The key for this call, resolved through the shared helper: credentials store
+   * first, process environment second.
+   */
+  const resolveApiKey = () => resolveApiKeyFrom(ctx, effective().apiKeyEnv, logger);
+
   // prepend: this listener runs after downstream listeners have produced
   // their decision, so it sees the final claimed batch and appends its
   // message last — the same etiquette the memory plugins use, so the
@@ -207,7 +213,7 @@ export async function apply(ctx, input = {}, deps = {}) {
 
       let outcome;
       try {
-        const verdict = await classify(config, state, logger);
+        const verdict = await classify(config, state, logger, resolveApiKey);
         outcome = decide(verdict, config);
       } catch (error) {
         // Fail-open: a timeout, a 429, a missing key — the turn proceeds
@@ -232,6 +238,12 @@ export async function apply(ctx, input = {}, deps = {}) {
           ? services.sessionProjections?.stateOf?.(agent?.session, "subagentModelSelectionPolicy")
           : undefined, capabilities.toolName, selectedTool?.provider);
         addition = await buildMessage(renderVerdictMessage(outcome, config, { preview: trigger?.action === "preview", routeAdvice }));
+      } else if (outcome.action === "error" && trigger !== null) {
+        // Only an explicit request hears about it: in `auto` mode an ordinary
+        // turn that fails must stay as silent as it was before, or a bad key
+        // would write a diagnostic into every single turn.
+        logger.warn?.(`jev-subagent-dispatch: classification failed — ${outcome.reason}`);
+        addition = await buildMessage(renderErrorMessage(outcome.reason));
       } else if (outcome.action === "skip" && trigger?.action === "preview") {
         // Preview exists to inspect the cases you cannot see otherwise —
         // misses included: render the skip verdict with its answers.

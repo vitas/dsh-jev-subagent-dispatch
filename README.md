@@ -45,6 +45,7 @@ For a dispatch plugin, calling Jev before knowing whether the agent can delegate
 |---|---|---|
 | Capability check passes | classify → inject recommendation | classify → inject recommendation |
 | Capability check fails | inject a diagnostic naming what is missing; **no Jev call** | **fully silent** — no injection, no call, no log line |
+| The Jev call itself fails (timeout, rejected key, HTTP error) | inject a one-line diagnostic naming the failure; the turn proceeds unrouted | **fully silent** — the turn proceeds unrouted |
 
 Changes to session or plugin setup take effect on the next request — nothing is cached from boot.
 
@@ -176,7 +177,7 @@ dsh plugin --profile web add /path/to/dsh-jev-subagent-dispatch   # local checko
 dsh plugin --profile web add dsh-jev-subagent-dispatch
 ```
 
-Then set the issuer's key variable (`OPENROUTER_API_KEY` for B.AI, `TYPESAFE_API_KEY` for TypeSafe direct) in the environment you boot `dsh web` from, set `mode: once` (or `auto`) in the plugin row, and restart the profile. In `once` mode nothing is sent or classified until you send a trigger.
+Then make the issuer's key available under the name the preset expects (`OPENROUTER_API_KEY` for B.AI, `TYPESAFE_API_KEY` for TypeSafe direct). The plugin resolves that name **before every call**, credentials store first and process environment second — so the usual case needs nothing at all, because the key is already stored under that name by the Models page. An environment variable works too, but only if it is set for the process that runs `dsh web`. the profile. In `once` mode nothing is sent or classified until you send a trigger.
 
 ### Wiring test without a key
 
@@ -199,9 +200,9 @@ All settings live in the plugin row's `config`. The bundle patch ships the docum
 | `provider` | `typesafe` | which Jev issuer preset applies: `typesafe`, `bai`, `openrouter` |
 | `endpoint` | per preset | TypeSafe API base — override for a proxied endpoint |
 | `apiPath` | per preset | path appended to the endpoint (`/v1/systemone`, `/v1/decisions`, …) |
-| `apiKeyEnv` | per preset | env var carrying the Bearer key |
+| `apiKeyEnv` | per preset | name the Bearer key is resolved by, per call: a credential from the store the Models page writes, else an environment variable |
 | `model` | per preset | **pinned** System One model — thresholds are calibrated per version; do not use `jev-latest` |
-| `timeoutMs` | `900` | classification budget; on expiry the turn proceeds unrouted |
+| `timeoutMs` | `4000` | classification budget; on expiry the turn proceeds unrouted (a live decision measured 1517 ms) |
 | `stateChars` | `1200` | head cap of the redacted state built from the user turn |
 | `redactPatterns` | `[]` | extra regex sources redacted from the state and log text, on top of the built-in credential patterns |
 | `mock` | `false` | keyword classifier for wiring tests only |

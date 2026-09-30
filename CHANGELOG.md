@@ -4,6 +4,33 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 semantic versioning.
 
+## [0.7.4] - 2026-09-30
+
+### Fixed
+
+- **A failed classification is no longer silent.** A timeout, a rejected key or an
+  HTTP error was fail-open *and* mute: the turn proceeded unrouted and nothing
+  reached the conversation, so an explicit `/route` that never got an answer looked
+  identical to a plugin that was never wired up. An explicit trigger now gets a
+  one-line diagnostic naming the failure. Ordinary turns stay silent in `auto` mode
+  — a bad key must not write a diagnostic into every turn.
+- **The key no longer has to be an environment variable.** It is resolved before
+  every call: the credentials store first (the one the Models page writes, where an
+  issuer key normally already lives), then `process.env`. Same precedence as the
+  search plugin, so one stored key serves both. The field is labelled *Key
+  reference* accordingly.
+- **`timeoutMs` default was below a real answer.** A live decision against
+  `api.b.ai/v1/decisions` took 1517 ms while the shipped budget was 900 ms, so every
+  real classification quietly abandoned itself. The default is now 4000 ms.
+
+### Changed
+
+- The row schema takes every default from the resolver's own `defaults()`; the
+  values are no longer repeated in the schema, so they cannot drift again.
+- The npm tarball no longer carries `docs/`: README screenshots are absolute
+  `raw.githubusercontent` URLs, so the in-tarball copies were dead weight
+  (148 kB → 48 kB packed).
+
 ## [0.7.3] - 2026-09-30
 
 ### Fixed

@@ -1,6 +1,6 @@
 {
   "name": "dsh-jev-subagent-dispatch",
-  "version": "0.7.3",
+  "version": "0.7.4",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/vitas/dsh-jev-subagent-dispatch.git"
@@ -32,8 +32,7 @@
     "lib/client.js",
     "cordis.patch.yml",
     "README.md",
-    "CHANGELOG.md",
-    "docs/"
+    "CHANGELOG.md"
   ],
   "scripts": {
     "build": "node scripts/build-client.mjs",

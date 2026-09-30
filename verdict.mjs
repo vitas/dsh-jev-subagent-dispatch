@@ -391,6 +391,26 @@ export function renderVerdictMessage(decision, config, { preview = false, routeA
  * @param missing - the capability gaps from {@link checkDispatchCapabilities}.
  * @returns the message text.
  */
+/**
+ * Say that the call itself failed, instead of answering with silence.
+ *
+ * The capability diagnostic above has always done this for its own failures; a
+ * timeout, a rejected key or an HTTP error used to be fail-open *and* mute, so an
+ * explicit `/route` that reached nobody looked identical to a plugin that was
+ * never wired up. The turn still proceeds unrouted — this only stops the plugin
+ * from hiding that.
+ *
+ * @param reason - the failure text (the thrown error's message).
+ * @returns the message body to inject.
+ */
+export function renderErrorMessage(reason) {
+  return [
+    "[jev-subagent-dispatch] The Jev call failed, so this request was not routed:",
+    `- ${reason ?? "unknown failure"}`,
+    "Most often that is the key reference — store the credential under Settings → Models, or set the named environment variable for the process running dsh — and it can also be a wrong endpoint or path. The request itself proceeded normally.",
+  ].join("\n");
+}
+
 export function renderUnavailableMessage(missing) {
   return [
     "[jev-subagent-dispatch] Dispatch is unavailable in this session, so no Jev call was made. Missing:",

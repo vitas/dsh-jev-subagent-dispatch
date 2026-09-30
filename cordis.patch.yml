@@ -51,7 +51,7 @@
         # override the preset. The response's `model` field is logged with
         # every verdict so drift is visible in the log.
         provider: typesafe
-        timeoutMs: 900
+        timeoutMs: 4000
 
         # Mock mode answers from keywords with fixed confidence — wiring
         # test without a key. Never ship it on: it classifies nothing.

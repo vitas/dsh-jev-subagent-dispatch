@@ -246,7 +246,11 @@ export function defaults() {
     apiPath: "/v1/systemone",
     apiKeyEnv: "TYPESAFE_API_KEY",
     model: "jev-1.13.0",
-    timeoutMs: 900,
+    // Measured against api.b.ai/v1/decisions (jev-1.13.0): a live decision took
+    // 1517 ms, so the old 900 ms budget could only ever expire. The turn still
+    // proceeds unrouted on expiry, which is exactly why a too-small default was
+    // invisible: every real classification abandoned itself.
+    timeoutMs: 4000,
     stateChars: 1200,
     mock: false,
     questions: structuredClone(DEFAULT_QUESTIONS),

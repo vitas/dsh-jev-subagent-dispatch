@@ -461,7 +461,7 @@ export function JevSettingsCard(props: { scope: JevScope; allowlist?: JevScope; 
             parse={trimmed} onCommit={(parsed) => commit('model', parsed)} onReset={() => reset('model')} monospace
           />
           <Field
-            id="jev-timeout" label={tr('timeoutMs')} value={String(value.timeoutMs ?? 900)} overridden={overridden('timeoutMs')} disabled={disabled}
+            id="jev-timeout" label={tr('timeoutMs')} value={String(value.timeoutMs ?? 4000)} overridden={overridden('timeoutMs')} disabled={disabled}
             parse={number(50, 30000)} onCommit={(parsed) => commit('timeoutMs', parsed)} onReset={() => reset('timeoutMs')}
           />
         </div>

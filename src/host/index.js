@@ -57,7 +57,14 @@ const PRESET_IDS = Object.keys(PROVIDER_PRESETS);
 function shipped() {
   const d = defaults();
   return {
+    mode: d.mode,
+    provider: d.provider,
     activeProfile: d.activeProfile,
+    stateChars: d.stateChars,
+    timeoutMs: d.timeoutMs,
+    logTurnText: d.logTurnText,
+    mock: d.mock,
+    skipSubagentSessions: d.skipSubagentSessions,
     triggers: structuredClone(d.triggers),
     questions: structuredClone(d.questions),
     profiles: structuredClone(d.profiles),
@@ -82,14 +89,14 @@ function makeSchema(z, volatile) {
   const d = shipped();
   return z.object({
     // --- card surface ----------------------------------------------------
-    mode: mark(z.union(MODES.map((id) => z.const(id))).default("off")),
-    provider: mark(z.union(PRESET_IDS.map((id) => z.const(id))).default("typesafe")),
+    mode: mark(z.union(MODES.map((id) => z.const(id))).default(d.mode)),
+    provider: mark(z.union(PRESET_IDS.map((id) => z.const(id))).default(d.provider)),
     activeProfile: mark(z.string().default(d.activeProfile)),
     triggers: mark(z.array(z.string()).default(d.triggers)),
-    stateChars: mark(z.number().step(1).min(200).max(8000).default(1200)),
-    timeoutMs: mark(z.number().step(1).min(50).max(30000).default(900)),
+    stateChars: mark(z.number().step(1).min(200).max(8000).default(d.stateChars)),
+    timeoutMs: mark(z.number().step(1).min(50).max(30000).default(d.timeoutMs)),
     logDir: mark(z.string()),
-    logTurnText: mark(z.boolean().default(false)),
+    logTurnText: mark(z.boolean().default(d.logTurnText)),
     // Endpoint overrides for gateways a preset does not cover.
     endpoint: mark(z.string()),
     apiPath: mark(z.string()),
@@ -98,14 +105,14 @@ function makeSchema(z, volatile) {
     // --- profile-patch surface, carried through unchanged -----------------
     // Defaulted for the same reason as the card fields: the settings surface must
     // still describe a complete configuration after a patch has replaced the row's.
-    mock: mark(z.boolean().default(false)),
+    mock: mark(z.boolean().default(d.mock)),
     questions: mark(z.any().default(d.questions)),
     profiles: mark(z.any().default(d.profiles)),
     routeFor: mark(z.any().default(d.routeFor)),
     defaultRoute: mark(z.string().default(d.defaultRoute)),
     routes: mark(z.any().default(d.routes)),
     delegationTools: mark(z.any().default(d.delegationTools)),
-    skipSubagentSessions: mark(z.boolean().default(true)),
+    skipSubagentSessions: mark(z.boolean().default(d.skipSubagentSessions)),
     redactPatterns: mark(z.array(z.string())),
     includeFallbackLine: mark(z.boolean().default(d.includeFallbackLine)),
   });

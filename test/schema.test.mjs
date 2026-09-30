@@ -48,6 +48,9 @@ test('schema: an empty row config still describes the whole configuration', asyn
   assert.ok(Object.keys(plain(parsed.questions)).length > 0, 'the rubric is part of the defaults')
   assert.ok(Object.keys(plain(parsed.profiles)).length > 0, 'the policy is part of the defaults')
   assert.ok(Array.isArray(plain(parsed.delegationTools)))
+  // A live decision measured 1517 ms against api.b.ai; the old 900 ms default
+  // could only ever expire, and expiry used to be silent.
+  assert.equal(plain(parsed.timeoutMs), 4000)
 })
 
 test('schema: the endpoint group stays empty so the provider preset still wins', async (t) => {

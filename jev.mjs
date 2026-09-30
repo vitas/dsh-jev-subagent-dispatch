@@ -54,15 +54,50 @@ export function buildRequestBody(config, state) {
 }
 
 /**
+ * Resolve the Bearer key for one call.
+ *
+ * The credentials store wins over the process environment: that store is what the
+ * Models page writes, so an issuer key usually already lives there and needs no
+ * environment surgery around `dsh web`. Resolved per call, never cached.
+ *
+ * @param ctx - plugin context that may expose the `credentials` service.
+ * @param name - credential reference, or environment variable name.
+ * @param logger - optional logger, for a store that throws.
+ * @param env - environment map (injectable for tests).
+ * @returns the key, or `undefined` when neither source has it.
+ */
+export async function resolveApiKeyFrom(ctx, name, logger, env = process.env) {
+  if (typeof name !== "string" || name.length === 0) return undefined;
+  const credentials = ctx?.get?.("credentials");
+  if (credentials !== undefined) {
+    try {
+      const resolved = await credentials.resolve(name);
+      if (resolved !== undefined && typeof resolved.value === "string" && resolved.value.length > 0) {
+        return resolved.value;
+      }
+    } catch (error) {
+      logger?.warn?.(`jev-subagent-dispatch: credential lookup failed — ${String(error)}`);
+    }
+  }
+  const ambient = env[name];
+  return typeof ambient === "string" && ambient.length > 0 ? ambient : undefined;
+}
+
+/**
  * Classify one state against the configured rubric.
  * @param config - resolved plugin configuration.
  * @param state - the text state (redacted task description + context).
  * @param logger - host logger with `.warn()`.
+ * @param resolveApiKey - resolves the Bearer key; defaults to reading
+ *   `process.env[config.apiKeyEnv]`. Compositions with a credentials service
+ *   pass a resolver so the key can come from the store the Models page writes,
+ *   exactly like the search plugin — an environment variable is one way to
+ *   supply a key, not the only reasonable one.
  * @returns `{ answers, model, usage, latencyMs }` where `answers` maps
  *   question id to a normalized answer and `usage` is the response's
  *   `{ input_tokens, output_tokens }` when present.
  */
-export async function classify(config, state, logger = console) {
+export async function classify(config, state, logger = console, resolveApiKey) {
   const startedAt = Date.now();
   if (config.mock) {
     return {
@@ -72,9 +107,11 @@ export async function classify(config, state, logger = console) {
       latencyMs: Date.now() - startedAt,
     };
   }
-  const apiKey = process.env[config.apiKeyEnv];
+  const apiKey = resolveApiKey === undefined
+    ? process.env[config.apiKeyEnv]
+    : await resolveApiKey();
   if (typeof apiKey !== "string" || apiKey.length === 0) {
-    throw new Error(`jev-subagent-dispatch: environment variable ${config.apiKeyEnv} is not set`);
+    throw new Error(`jev-subagent-dispatch: no API key for "${config.apiKeyEnv}" — store that credential under Settings → Models, or set the environment variable of that name for the process running dsh`);
   }
   const response = await fetch(buildRequestUrl(config), {
     method: "POST",

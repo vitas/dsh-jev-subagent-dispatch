@@ -11,7 +11,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { criteriaLevelNames, defaults, PROVIDER_PRESETS, resolveConfig, validate } from "../config.mjs";
-import { buildRequestBody, buildRequestUrl, normalizeAnswers } from "../jev.mjs";
+import { buildRequestBody, buildRequestUrl, normalizeAnswers, resolveApiKeyFrom } from "../jev.mjs";
 import { apply } from "../index.mjs";
 import { checkDispatchCapabilities, delegationDepthOf, routeAdviceFor } from "../capabilities.mjs";
 import {
@@ -1097,4 +1097,146 @@ test("config: the renamed mechanical role folds into junior", () => {
   assert.equal("mechanical" in explicit.routes, false);
   // Nothing to fold: the shipped triple is untouched.
   assert.deepEqual(Object.keys(resolveConfig({ provider: "openrouter" }).routes).sort(), ["implementer", "junior", "researcher"]);
+});
+
+test("key: the credentials store wins over the environment", async () => {
+  // The store is what the Models page writes, so an issuer key normally already
+  // lives there; an environment variable is the fallback, not the requirement.
+  const ctx = { get: (name) => (name === "credentials"
+    ? { resolve: async (ref) => (ref === "JEV_KEY" ? { value: "from-store" } : undefined) }
+    : undefined) };
+  assert.equal(await resolveApiKeyFrom(ctx, "JEV_KEY", undefined, { JEV_KEY: "from-env" }), "from-store");
+  assert.equal(await resolveApiKeyFrom(ctx, "JEV_OTHER", undefined, { JEV_OTHER: "from-env" }), "from-env");
+});
+
+test("key: an empty or throwing store falls through to the environment", async () => {
+  const warns = [];
+  const empty = { get: () => ({ resolve: async () => ({ value: "" }) }) };
+  assert.equal(await resolveApiKeyFrom(empty, "JEV_KEY", undefined, { JEV_KEY: "from-env" }), "from-env");
+  const throwing = { get: () => ({ resolve: async () => { throw new Error("no such store entry"); } }) };
+  assert.equal(await resolveApiKeyFrom(throwing, "JEV_KEY", { warn: (m) => warns.push(m) }, { JEV_KEY: "from-env" }), "from-env");
+  assert.match(warns[0] ?? "", /credential lookup failed/);
+});
+
+test("key: neither source leaves the key unresolved, and no name is not a lookup", async () => {
+  assert.equal(await resolveApiKeyFrom({}, "JEV_ABSENT", undefined, {}), undefined);
+  assert.equal(await resolveApiKeyFrom({ get: () => ({ resolve: async () => ({ value: "x" }) }) }, "", undefined, {}), undefined);
+});
+
+test("host: a failed call on an explicit trigger is reported instead of silent", async () => {
+  // The fail-open path used to be mute: a key that was never wired up looked
+  // exactly like a plugin that decided not to route.
+  const ctx = fakeContext(capableServices());
+  const additions = [];
+  await apply(ctx, { mode: "once", mock: false, provider: "openrouter", apiKeyEnv: "JEV_TEST_UNSET_KEY" }, {
+    services: capableServices(),
+    pluginMessage: async (text) => {
+      additions.push(text);
+      return { role: "user", content: [{ type: "text", text }] };
+    },
+  });
+  const decision = {
+    kind: "enter",
+    messages: [{ role: "user", content: [{ type: "text", text: "/route rename the config keys everywhere" }] }],
+  };
+  const routed = await ctx.calls[0].handler(
+    { agent: { session: {} }, messages: decision.messages, signal: null },
+    async () => decision,
+  );
+  assert.equal(additions.length, 1, "an explicit request hears about the failure");
+  assert.match(additions[0], /Jev call failed/);
+  assert.match(additions[0], /JEV_TEST_UNSET_KEY/);
+  assert.notEqual(routed, decision, "the diagnostic reaches the turn");
+});
+
+test("host: a failed call on an ordinary turn stays silent", async () => {
+  // In `auto` mode a bad key must not write a diagnostic into every turn.
+  const ctx = fakeContext(capableServices());
+  const additions = [];
+  await apply(ctx, { mode: "auto", mock: false, provider: "openrouter", apiKeyEnv: "JEV_TEST_UNSET_KEY" }, {
+    services: capableServices(),
+    pluginMessage: async (text) => {
+      additions.push(text);
+      return { role: "user", content: [{ type: "text", text }] };
+    },
+  });
+  const decision = {
+    kind: "enter",
+    messages: [{ role: "user", content: [{ type: "text", text: "rename the config keys everywhere" }] }],
+  };
+  const routed = await ctx.calls[0].handler(
+    { agent: { session: {} }, messages: decision.messages, signal: null },
+    async () => decision,
+  );
+  assert.equal(additions.length, 0);
+  assert.equal(routed, decision);
+});
+
+/** Run one explicit `/route` turn through a stand with a stubbed fetch. */
+async function runTurnWithFetch({ services, config, fetchImpl, text = "/route rename the config keys everywhere" }) {
+  const original = globalThis.fetch;
+  globalThis.fetch = fetchImpl;
+  try {
+    const ctx = fakeContext(services);
+    const additions = [];
+    await apply(ctx, config, {
+      services,
+      pluginMessage: async (body) => {
+        additions.push(body);
+        return { role: "user", content: [{ type: "text", text: body }] };
+      },
+    });
+    const messages = [{ role: "user", content: [{ type: "text", text }] }];
+    const decision = { kind: "enter", messages };
+    await ctx.calls[0].handler({ agent: { session: {} }, messages, signal: null }, async () => decision);
+    return additions;
+  } finally {
+    globalThis.fetch = original;
+  }
+}
+
+test("host: the key reaches the wire from the credentials store, not only from the environment", async () => {
+  // Credentials store first: the Models page is where a key usually already is,
+  // so a stored key must be enough to make a real call — no exported variable.
+  const seen = [];
+  const services = {
+    ...capableServices(),
+    credentials: { resolve: async (ref) => ({ value: `cred-${ref}` }) },
+  };
+  const additions = await runTurnWithFetch({
+    services,
+    config: { mode: "once", mock: false, provider: "openrouter", apiKeyEnv: "JEV_TEST_CRED" },
+    fetchImpl: async (_url, init) => {
+      seen.push(init?.headers?.authorization);
+      return { ok: false, status: 401, text: async () => "bad key" };
+    },
+  });
+  assert.deepEqual(seen, ["Bearer cred-JEV_TEST_CRED"], "the stored key was sent, and it was the store's value");
+  assert.match(additions.at(-1) ?? "", /HTTP 401/, "and the failure is reported, not swallowed");
+});
+
+test("host: a 1.5 second answer fits the shipped budget, and did not fit the old 900 ms one", async () => {
+  // The measured latency of a live decision, against the old and new defaults.
+  // Honours the abort signal, as real fetch does: without that the budget could
+  // not be exercised at all, and the old default would look fine.
+  const slow = async (_url, init) => {
+    await new Promise((resolve, reject) => {
+      const timer = setTimeout(resolve, 1500);
+      init?.signal?.addEventListener("abort", () => {
+        clearTimeout(timer);
+        const error = new Error("The operation was aborted due to timeout");
+        error.name = "TimeoutError";
+        reject(error);
+      }, { once: true });
+    });
+    return { ok: false, status: 401, text: async () => "slow but alive" };
+  };
+  const services = { ...capableServices(), credentials: { resolve: async () => ({ value: "cred" }) } };
+  const base = { mode: "once", mock: false, provider: "openrouter", apiKeyEnv: "JEV_TEST_CRED" };
+
+  const shipped = await runTurnWithFetch({ services, config: { ...base }, fetchImpl: slow });
+  assert.match(shipped.at(-1) ?? "", /HTTP 401/, "4000 ms default: the answer arrived");
+
+  const old = await runTurnWithFetch({ services, config: { ...base, timeoutMs: 900 }, fetchImpl: slow });
+  assert.match(old.at(-1) ?? "", /abort|timeout/i, "900 ms: the same answer was cut off");
 });
