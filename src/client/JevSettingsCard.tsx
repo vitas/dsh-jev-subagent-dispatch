@@ -14,6 +14,7 @@
  */
 import * as React from 'react'
 import { useCallback, useState, useSyncExternalStore } from 'react'
+import { PACKAGE_NAME } from '../shared/config.mjs'
 import { localeRevision, subscribeLocale, tr } from './i18n.js'
 import type { JevScope, JevSettings, SubagentAllowlist } from './types.js'
 
@@ -44,6 +45,10 @@ const segBtn = (active: boolean): React.CSSProperties => ({
   color: active ? '#fff' : 'inherit',
 })
 const errorStyle: React.CSSProperties = { fontSize: 11, color: 'var(--dsw-alias-text-danger, #e66)', marginTop: 4 }
+const versionStyle: React.CSSProperties = {
+  fontSize: 10, margin: '14px 0 0', opacity: 0.55, letterSpacing: 0.2,
+  fontFamily: 'var(--dsw-alias-font-mono, ui-monospace, monospace)',
+}
 const warningStyle: React.CSSProperties = {
   fontSize: 11, margin: '0 0 12px', padding: '8px 10px', borderRadius: 6,
   border: '1px solid var(--dsw-alias-border-danger, #a33)',
@@ -437,6 +442,14 @@ export function JevSettingsCard(props: { scope: JevScope; allowlist?: JevScope; 
           />
         </div>
       </div>
+
+      {/* Which build this tab is actually running: a host restart does not reload
+          an open tab, so this is the first thing to check when the card looks
+          older than the release you just installed. */}
+      <p style={versionStyle}>
+        {PACKAGE_NAME} {'v'}
+        {typeof __JEV_VERSION__ === 'string' ? __JEV_VERSION__ : 'dev'}
+      </p>
     </div>
   )
 }

@@ -4,6 +4,20 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 semantic versioning.
 
+## [0.7.2] - 2026-09-30
+
+### Added
+
+- The card prints the version it was built from. A browser tab keeps the bundle it
+  loaded and a host restart does not reload it, so "the card looks wrong" is very
+  often "this tab is running older code" — with the version on screen that is a
+  glance instead of an investigation.
+
+### Fixed
+
+- Re-shot the README screenshots: the first pair was captured with the first-run
+  "Preview Notice" dialog still open, which covered the card.
+
 ## [0.7.1] - 2026-09-30
 
 ### Added

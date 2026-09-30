@@ -25,6 +25,7 @@ const result = await build({
   jsx: 'automatic',
   external: ['react', 'react/jsx-runtime'],
   charset: 'utf8',
+  define: { __JEV_VERSION__: JSON.stringify(pkg.version) },
   minify: process.env.NODE_ENV === 'production',
   write: false,
   legalComments: 'none',
