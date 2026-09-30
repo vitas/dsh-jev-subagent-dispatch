@@ -160,7 +160,7 @@ Set `mock: true` in the plugin row config. The mock classifier answers from keyw
 
 ## Settings
 
-Two surfaces, one source of truth. The **Plugins settings tab** (v0.2+) edits the top-level fields live: mode, provider preset, decision profile, triggers, log directory and turn-text switch, state cap, and the classifier endpoint group — edits reach the next turn **without a host restart**, and a rejected value keeps the previous good config. The **profile patch** remains the base layer for everything the card deliberately does not fake: profile thresholds (`effortMax`, `noulMax`, `probabilityMax`), `routeFor`/`routes`, custom `questions`, `delegationTools`.
+Two surfaces, one source of truth. The plugin's **own configuration page under Plugins** (DSH 0.1.7+, reachable from the row's **Configure** control) — or the **Plugins settings tab** on 0.1.5 — edits the top-level fields live: mode, provider preset, decision profile, triggers, log directory and turn-text switch, state cap, and the classifier endpoint group — edits reach the next turn **without a host restart**, and a rejected value keeps the previous good config. The **profile patch** remains the base layer for everything the card deliberately does not fake: profile thresholds (`effortMax`, `noulMax`, `probabilityMax`), `routeFor`/`routes`, custom `questions`, `delegationTools`.
 
 All settings live in the plugin row's `config`. The bundle patch ships the documented defaults; override the same row by id in your profile's `cordis.patch.yml` (edits there are the base layer the card rides on). Merging: `questions` and `routes` merge per key (override one entry, keep the rest); `profiles` deep-merge (tweak one threshold, keep the predicate); everything else follows ordinary deep-merge rules.
 
@@ -251,7 +251,7 @@ The suite covers the TypeSafe wire contract (`questions` as an id-keyed map with
 
 ## Compatibility
 
-Pure ESM, no runtime npm dependencies; the `@deepseek-ai/dsh-llm` peer is resolved from the host. If the peer is unreachable (a bare checkout), the plugin **skips the injection** rather than fabricating a message outside DSH's message contract. Node ≥ 22. Developed and tested against DSH `0.1.7-rc.2` (web profile).
+Pure ESM, no runtime npm dependencies; the `@deepseek-ai/dsh-llm` peer is resolved from the host. If the peer is unreachable (a bare checkout), the plugin **skips the injection** rather than fabricating a message outside DSH's message contract. The optional `@deepseek-ai/schemastery` peer (≥3.18.1) backs the settings schema; without it the profile patch stays the sole configuration source. Node ≥ 22. Developed and tested against DSH `0.1.5`, `0.1.7`, and `0.2.0` (web profile) — the settings surface is chosen by service injection, never a version check.
 
 ## License
 

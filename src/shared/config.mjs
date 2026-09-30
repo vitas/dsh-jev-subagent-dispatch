@@ -15,8 +15,21 @@
 /** Settings namespace owned by this plugin. */
 export const SETTINGS_NAMESPACE = 'jev-subagent-dispatch'
 
-/** Cordis plugin name and settings-section name. */
+/** Cordis plugin name, Loader row id, and settings-section name. */
 export const PLUGIN_NAME = 'jev-subagent-dispatch'
+
+/** npm package name this plugin ships as. */
+export const PACKAGE_NAME = 'dsh-jev-subagent-dispatch'
+
+/**
+ * Key the browser half registers the row's configuration page under.
+ *
+ * DSH 0.1.7+ keys `plugins.row.config` by `<package name>#<row id>`, and this
+ * plugin's row id is its cordis plugin name. 0.1.5 keys the old
+ * `settings.plugin.item` by the settings namespace instead; both are derived
+ * here so the two halves cannot disagree about which entry they own.
+ */
+export const ROW_CONFIG_KEY = `${PACKAGE_NAME}#${PLUGIN_NAME}`
 
 /** Activation modes. `off` classifies nothing; the listener stays quiet. */
 export const MODES = ['off', 'once', 'auto']

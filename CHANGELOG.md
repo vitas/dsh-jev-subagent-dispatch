@@ -1,0 +1,69 @@
+# Changelog
+
+All notable changes to this project are documented here. The format follows
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
+semantic versioning.
+
+## [0.3.1] - 2026-09-30
+
+The configuration card now sits on the plugin's own page, the way the shipped
+plugins do it: opening Plugins → `dsh-jev-subagent-dispatch` shows the fields
+immediately, instead of one click further in behind a **Configure** control that
+nothing in the list announced.
+
+### Changed
+
+- Register the card in `plugins.bundle.config`, keyed by package name, the slot
+  the plugin manager draws inline on the package page. `plugins.row.config` is
+  kept alongside it, so DSH 0.1.7 — which knows only that slot — still gets a
+  card rather than none.
+
+## [0.3.0] - 2026-09-30
+
+The configuration card works again, and it works on every settings model DSH
+ships: the Plugins row page on 0.1.7 and 0.2.0, and the Plugins settings tab on
+0.1.5. No configuration change is needed on any version — the same
+`cordis.patch.yml` entry keeps working, and both the profile patch and the card
+reach the next turn without a host restart.
+
+### Added
+
+- Row-configuration page for DSH 0.1.7+, which replaced `settings.plugin.item`
+  with the keyed `plugins.row.config` slot. A row's own `Config` is its settings
+  section there, so the form is registered against
+  `dsh-jev-subagent-dispatch#jev-subagent-dispatch` and gives the row a
+  **Configure** control on the Plugins page.
+- `src/shared/config.mjs` now carries the package name and the row-config key,
+  so the host and the browser cannot disagree about which entry they own.
+- Optional `heading` prop on the settings card: the 0.1.7+ row page draws the
+  title and crumb around the form itself, so the card drops its own there.
+
+### Fixed
+
+- **DSH 0.1.7+: the configuration card is reachable again.** The entry was
+  missing from the Plugins page entirely — no Configure control and no namespace
+  — because it is the *volatile* part of a `Config` schema that 0.1.7 projects a
+  form from. Every field of the exported `Config` is now marked `.volatile()`,
+  which is inert on 0.1.5, whose `schemastery` (3.18.2) has no such method.
+- **DSH 0.1.7+: your configuration actually reaches the router again.** 0.1.7
+  hands each volatile field to `apply` as a live accessor (`config.mode.get()`)
+  rather than a value. Read as a scalar it looks like an absent field, so every
+  turn silently fell back to the constants — `off` mode and the TypeSafe preset
+  — whatever the patch or the form said. Every read is now unwrapped.
+- **The browser half is loaded at all on 0.1.7+.** `package.json` declared no
+  `dsh.client` platform and no `exports["./client"]`, so DSH's client-module
+  scanner classified the package as "not a client package" and never served
+  `lib/client.js` — the card could not register on any surface.
+- **The `schemastery` peer is declared.** In a pnpm profile the module did not
+  resolve from the plugin, `buildSchemas()` silently caught the failure, and
+  `Config` came out `undefined` with no error anywhere. The peer (≥3.18.1) is
+  now in `peerDependencies` beside the `devDependencies` pin.
+- **The `patchReload: live` claim is gone from the docs.** Nothing in DSH reads
+  that key; live application comes from volatile row fields re-read every turn
+  (0.1.7+) or from the settings bridge (0.1.5), not from that setting.
+- The dangling `config-schema.mjs` draft is folded into `src/host/index.js`
+  (its field list became the real `Config`) and deleted.
+
+## [0.2.0] - 2026-09-30
+
+Settings card on the Plugins tab: live edits without a restart.

@@ -3,7 +3,10 @@
  *
  * The single configuration source is the plugin row's `config` (the bundle
  * patch ships defaults; the user's profile patch overrides the same row by
- * id, and with `patchReload: live` edits apply without a restart).
+ * id). On DSH 0.1.7+ an edit through the Plugins row page or the profile patch
+ * reaches the live listener without a restart, because the row's volatile
+ * `Config` fields are handed to `apply` as live accessors and re-read every
+ * turn; on 0.1.5 the settings bridge supplies the same freshness.
  *
  * The `questions` map mirrors TypeSafe's documented request shape exactly
  * (map keyed by question id; each entry carries `type`, `instructions`,

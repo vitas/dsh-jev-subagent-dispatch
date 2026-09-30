@@ -12,7 +12,8 @@
     "noEmit": true,
     "skipLibCheck": true,
     "isolatedModules": true,
-    "allowJs": false,
+    "allowJs": true,
+    "checkJs": false,
     "types": []
   },
   "include": ["src/client/**/*.ts", "src/client/**/*.tsx"]

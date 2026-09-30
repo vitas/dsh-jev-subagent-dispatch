@@ -1,10 +1,16 @@
 {
   "name": "dsh-jev-subagent-dispatch",
-  "version": "0.2.0",
+  "version": "0.3.1",
   "description": "Cut LLM costs: route routine tasks to cheap subagent models (DeepSeek Harness plugin)",
   "license": "MIT",
   "type": "module",
   "main": "./index.mjs",
+  "exports": {
+    ".": "./index.mjs",
+    "./client": "./lib/client.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
   "files": [
     "index.mjs",
     "config.mjs",
@@ -17,7 +23,8 @@
     "src/host/index.js",
     "lib/client.js",
     "cordis.patch.yml",
-    "README.md"
+    "README.md",
+    "CHANGELOG.md"
   ],
   "scripts": {
     "build": "node scripts/build-client.mjs",
@@ -30,6 +37,13 @@
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-settings",
+        "@deepseek-ai/dsh-client-ui-settings-plugins"
+      ]
     }
   },
   "engines": {
@@ -45,6 +59,9 @@
   ],
   "bin": {
     "jev-replay": "./bin/jev-replay.mjs"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/schemastery": ">=3.18.1"
   },
   "devDependencies": {
     "@deepseek-ai/schemastery": "^3.18.2",

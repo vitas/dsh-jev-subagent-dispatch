@@ -184,13 +184,22 @@ function Toggle(props: {
   )
 }
 
-export function JevSettingsCard(props: { scope: JevScope }) {
+/**
+ * Top-level card.
+ *
+ * `heading` draws the card's own title and subtitle; the DSH 0.1.7+ plugin
+ * manager row page supplies both itself around the row's form, so the
+ * registration there passes `heading: false` rather than printing the title
+ * twice.
+ */
+export function JevSettingsCard(props: { scope: JevScope; heading?: boolean }) {
   useLocaleRevision()
   const snap = useScopeSnapshot(props.scope)
   const [pending, setPending] = useState(0)
   const value: JevSettings = snap.value ?? {}
   const writable = snap.writable !== false && snap.status === 'ready'
   const disabled = !writable
+  const showHeading = props.heading !== false
 
   const commit = useCallback((field: string, parsed: unknown) => {
     setPending((n) => n + 1)
@@ -204,7 +213,7 @@ export function JevSettingsCard(props: { scope: JevScope }) {
   // The base layer (the patch) decides whether a field shows the reset chip.
   const overridden = (field: string) => (snap.user as Record<string, unknown> | undefined)?.[field] !== undefined
 
-  if (snap.status === 'loading') return <p style={hintStyle}>{tr('title')}…</p>
+  if (snap.status === 'loading') return showHeading ? <p style={hintStyle}>{tr('title')}…</p> : null
   if (snap.status === 'unavailable') return <p style={hintStyle}>{tr('unavailable')}</p>
 
   const number = (min: number, max: number) => (text: string) => {
@@ -222,7 +231,14 @@ export function JevSettingsCard(props: { scope: JevScope }) {
 
   return (
     <div>
-      <p style={{ ...hintStyle, marginTop: 0 }}>{tr('description')}{pending > 0 ? ` · ${tr('saving')}` : ''}</p>
+      {showHeading ? (
+        <>
+          <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 2 }}>{tr('title')}</div>
+          <p style={{ ...hintStyle, marginTop: 0 }}>{tr('description')}{pending > 0 ? ` · ${tr('saving')}` : ''}</p>
+        </>
+      ) : pending > 0 ? (
+        <p style={{ ...hintStyle, marginTop: 0 }}>{tr('saving')}</p>
+      ) : null}
 
       <div style={{ marginBottom: 12 }}>
         <span style={labelStyle}>{tr('mode')}</span>

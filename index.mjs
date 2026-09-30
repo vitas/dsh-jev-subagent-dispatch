@@ -36,12 +36,30 @@ import { randomUUID } from "node:crypto";
 import { appendFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { PLUGIN_NAME, PLUGIN_SOURCE_KIND, resolveConfig } from "./config.mjs";
-import { installSettings } from "./src/host/index.js";
+import { installSettings, readConfig } from "./src/host/index.js";
 import { checkDispatchCapabilities, routeAdviceFor } from "./capabilities.mjs";
 import { classify } from "./jev.mjs";
 import { buildState, decide, findTrigger, redact, renderUnavailableMessage, renderVerdictMessage } from "./verdict.mjs";
 
 export const name = PLUGIN_NAME;
+
+/**
+ * The row's `Config` schema, which the DSH 0.1.7+ Loader validates the row
+ * against and the settings service projects into the Plugins row page. Absent
+ * when the schemastery peer does not resolve, in which case cordis treats the
+ * row as schema-less and the composition entry stays the sole configuration
+ * source. Every field is `.volatile()`; see `src/host/index.js`.
+ */
+export { Config } from "./src/host/index.js";
+
+/*
+ * The plugin is the module NAMESPACE (`name`, `inject`, `apply`, `Config`).
+ * There is deliberately no `export default`: the Loader normalizes a default
+ * export away (`unwrapExports` does `exports = exports.default ?? exports`),
+ * which would hand cordis the bare `apply` function — losing `Config` (so the
+ * row gets no settings section at all: no namespace, no Configure control), and
+ * losing `name`/`inject` with it. The named exports are the contract.
+ */
 
 /**
  * Build a DSH user message via the pinned peer (`@deepseek-ai/dsh-llm`),
@@ -90,22 +108,47 @@ function summarizeMessages(messages, config) {
 /**
  * Cordis plugin entry.
  * @param ctx - host context.
- * @param input - the `jev-subagent-dispatch` row's `config`.
+ * @param input - the `jev-subagent-dispatch` row's `config`, already resolved
+ *   by the Loader against {@link Config}. On 0.1.7+ every field arrives as a
+ *   live accessor and is read through `readConfig`; on 0.1.5 the values are
+ *   plain (and the settings section below supplies the live source).
  * @param deps - optional dependency overrides for tests.
  */
 export async function apply(ctx, input = {}, deps = {}) {
   const { pluginMessage: buildMessage = pluginMessage } = deps;
-  let config;
+  const logger = ctx.logger;
+  let warnedNoFactory = false;
+
+  // The configuration source, re-read on every turn. On 0.1.7+ `input` is the
+  // Loader-resolved row config whose volatile fields are LIVE ACCESSORS
+  // (`value.get()`), so `readConfig` unwraps them and a settings edit reaches
+  // the next turn without a restart; on 0.1.5 `input` is plain and
+  // `installSettings` below swaps in the section's own source.
+  let source = () => input;
+  let boot;
   try {
-    config = resolveConfig(input);
+    boot = resolveConfig(readConfig(source()));
   } catch (error) {
     // A broken config must be loud but must not take the host down: keep the
     // plugin inert and log at error level on every boot.
-    ctx.logger.error(String(error));
+    logger.error(String(error));
     return;
   }
-  const logger = ctx.logger;
-  let warnedNoFactory = false;
+  let lastGood = boot;
+  /**
+   * Effective configuration, read fresh so a live settings edit applies. A
+   * live edit the router's stricter validation rejects keeps the last good
+   * values instead of failing the turn.
+   */
+  const effective = () => {
+    try {
+      lastGood = resolveConfig(readConfig(source()));
+      return lastGood;
+    } catch (error) {
+      logger.warn?.(`jev-subagent-dispatch: live config rejected, keeping previous — ${String(error?.message ?? error)}`);
+      return lastGood;
+    }
+  };
 
   // prepend: this listener runs after downstream listeners have produced
   // their decision, so it sees the final claimed batch and appends its
@@ -115,10 +158,11 @@ export async function apply(ctx, input = {}, deps = {}) {
   // The listener registers in EVERY mode: `off` exits below before any work
   // (one field read per turn — no classification, no data sharing), and a
   // mode changed from the settings UI reaches the next turn without a host
-  // restart, because `config` is the live object the settings bridge rewrites.
+  // restart, because `effective()` re-reads the live configuration.
   ctx.on("agent/pre-step", async ({ agent, messages, signal }, next) => {
     const decision = await next();
     try {
+      const config = effective();
       if (config.mode === "off") return decision; // silent by default, zero cost
       if (decision?.kind !== "enter" || signal?.aborted) return decision;
       if (config.skipSubagentSessions && agent?.session?.header?.origin === "subagent") return decision;
@@ -230,16 +274,23 @@ export async function apply(ctx, input = {}, deps = {}) {
     }
   }, { prepend: true });
 
-  // The settings UI bridge: installs the `jev-subagent-dispatch` section and
-  // rewrites `config` in place on every edit, so card changes reach the next
-  // turn without a restart. Best effort — without the settings seam (or the
-  // schemastery peer) the profile patch stays the whole configuration.
+  // The settings bridge for 0.1.5, which still has `installSection`; on 0.1.7+
+  // the row's Config above is the settings section and this is a no-op. It
+  // swaps `source` for the section's own fully-resolved view, so card changes
+  // reach the next turn without a restart. Best effort — without the settings
+  // seam (or the schemastery peer) the profile patch stays the whole
+  // configuration.
   try {
-    await installSettings(ctx, config, input, resolveConfig, logger);
+    installSettings(ctx, {
+      baseInput: input,
+      resolveConfig,
+      logger,
+      setSource: (next) => {
+        source = next;
+      },
+    });
   } catch (error) {
     logger.debug?.(`jev-subagent-dispatch: settings UI bridge unavailable — ${String(error?.message ?? error)}`);
   }
-  logger.info(`jev-subagent-dispatch: listening (mode: ${config.mode})`);
+  logger.info(`jev-subagent-dispatch: listening (mode: ${boot.mode})`);
 }
-
-export default apply;

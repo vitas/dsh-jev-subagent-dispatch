@@ -5,8 +5,10 @@
 # `cordis.patch.yml`. Every value here is a neutral default: the user's
 # profile patch addresses the same row by id (`- id: jev-subagent-dispatch`) and its
 # `config` merges over this one (per-key for questions/routes, deep for
-# profiles), and with `patchReload: live` profile-patch edits apply without a
-# restart.
+# profiles). Edits apply to the running plugin without a restart: the row's
+# `Config` fields are volatile, so DSH 0.1.7+ hands them to `apply` as live
+# accessors that are re-read every turn (there is no `patchReload` key in DSH;
+# it was never a real setting).
 #
 # The `questions` map uses TypeSafe's documented request shape exactly (map
 # keyed by question id; `type` + `instructions` + `criteria`) — what is
@@ -15,9 +17,10 @@
 # descriptions (the answer's `score` is a position 0..n that may land
 # between two levels); Noul takes optional `criteria: { true, false }`.
 #
-# A settings card (v0.2+) edits the card fields live from the Plugins tab;
-# deeper policy (profiles, probabilityMax, routeFor, routes) stays HERE —
-# the card shows only top-level fields and points to this file for the rest.
+# A settings card edits the card fields live from the Plugins row page (0.1.7+)
+# or the Plugins settings tab (0.1.5); deeper policy (profiles, probabilityMax,
+# routeFor, routes) stays HERE — the card shows only top-level fields and
+# points to this file for the rest.
 
 - insert:
     - id: jev-subagent-dispatch

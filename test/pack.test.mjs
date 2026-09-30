@@ -46,7 +46,10 @@ test("packaging: the packed tarball ships every runtime module and loads", { tim
     await execFilePromised("tar", ["-xzf", join(dir, tarball), "-C", unpacked]);
     const packed = await import(pathToFileURL(join(unpacked, "package", "index.mjs")).href);
     assert.equal(typeof packed.apply, "function");
-    assert.equal(typeof packed.default, "function");
+    // The Loader unwraps a default export and would then lose the namespace's
+    // `Config`/`name`/`inject`; the named exports are the contract.
+    assert.equal(packed.default, undefined, "no default export: the Loader would drop Config");
+    assert.ok("Config" in packed, "the Config export is part of the plugin surface");
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
