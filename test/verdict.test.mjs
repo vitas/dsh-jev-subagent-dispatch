@@ -6,13 +6,15 @@
  * Run: node --test test/
  */
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
+import { realpathSync } from "node:fs";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { criteriaLevelNames, defaults, PROVIDER_PRESETS, resolveConfig, validate } from "../config.mjs";
 import { buildRequestBody, buildRequestUrl, normalizeAnswers, resolveApiKeyFrom } from "../jev.mjs";
-import { apply } from "../index.mjs";
+import { apply, loadMessageFactory, pluginMessage } from "../index.mjs";
 import { checkDispatchCapabilities, delegationDepthOf, routeAdviceFor } from "../capabilities.mjs";
 import {
   buildState,
@@ -1239,4 +1241,34 @@ test("host: a 1.5 second answer fits the shipped budget, and did not fit the old
 
   const old = await runTurnWithFetch({ services, config: { ...base, timeoutMs: 900 }, fetchImpl: slow });
   assert.match(old.at(-1) ?? "", /abort|timeout/i, "900 ms: the same answer was cut off");
+});
+
+test("host: the message factory resolves through the host entry point, not only the plugin's node_modules", async (t) => {
+  // A `link:` checkout has no node_modules of its own, and a bare import resolves
+  // from the importing module's REAL path — so the peer has to be reachable
+  // through the host. Skipped where no `dsh` is installed.
+  const entry = (() => {
+    try {
+      return realpathSync(execFileSync("which", ["dsh"], { encoding: "utf8" }).trim());
+    } catch {
+      return null;
+    }
+  })();
+  if (entry === null) return t.skip("no dsh on PATH");
+  const factory = await loadMessageFactory([entry]);
+  assert.equal(typeof factory, "function", "resolved through the host entry point");
+  const message = factory({
+    content: [{ type: "text", text: "проверка" }],
+    source: { kind: "plugin:jev-subagent-dispatch", plugin: "dsh-jev-subagent-dispatch" },
+  });
+  assert.equal(message.role, "user");
+  assert.equal(typeof message.id, "string");
+});
+
+test("host: an unreachable factory is reported instead of silently skipping", async () => {
+  const warns = [];
+  const message = await pluginMessage("текст", { warn: (line) => warns.push(line) });
+  // However it resolves here, it must never fail in silence.
+  if (message === null) assert.match(warns[0] ?? "", /dsh-llm is unreachable/);
+  else assert.equal(message.content[0].text, "текст");
 });

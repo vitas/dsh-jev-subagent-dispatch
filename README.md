@@ -177,6 +177,11 @@ dsh plugin --profile web add /path/to/dsh-jev-subagent-dispatch   # local checko
 dsh plugin --profile web add dsh-jev-subagent-dispatch
 ```
 
+The host half builds its injected message with the harness's own
+`@deepseek-ai/dsh-llm`. That is declared as an optional peer and resolved through
+the entry point of the running host, so a `link:`ed development checkout — which
+has no `node_modules` of its own — behaves exactly like an installed copy.
+
 Then make the issuer's key available under the name the preset expects (`OPENROUTER_API_KEY` for B.AI, `TYPESAFE_API_KEY` for TypeSafe direct). The plugin resolves that name **before every call**, credentials store first and process environment second — so the usual case needs nothing at all, because the key is already stored under that name by the Models page. An environment variable works too, but only if it is set for the process that runs `dsh web`. the profile. In `once` mode nothing is sent or classified until you send a trigger.
 
 ### Wiring test without a key

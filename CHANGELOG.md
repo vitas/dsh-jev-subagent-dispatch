@@ -4,6 +4,32 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 semantic versioning.
 
+## [0.7.5] - 2026-09-30
+
+### Fixed
+
+- **A linked checkout dropped every injection in silence — the plugin could not
+  work there at all.** The injected message is built with the harness's own
+  `@deepseek-ai/dsh-llm`, which the plugin reached through a bare
+  `import("@deepseek-ai/dsh-llm")` while declaring no dependency on it. Node
+  resolves bare specifiers from the importing module's *real* path, and a plugin
+  installed as a `link:` (a dev checkout, which is how this one is normally run)
+  has no `node_modules` of its own — so the import failed with
+  `ERR_MODULE_NOT_FOUND`, `pluginMessage` caught it and returned `null`, and every
+  verdict *and* every diagnostic was discarded. Nothing reached the conversation in
+  any mode, for any trigger, which made a working router indistinguishable from an
+  unwired one — and made the 0.7.4 diagnostics invisible too.
+
+  The factory is now resolved through the entry point of the running host (the
+  same copy the host builds its own injections with, so message invariants hold),
+  falling back to the bare import. `@deepseek-ai/dsh-llm` is declared as an
+  optional peer. When no path resolves, the skip is reported once through the
+  logger instead of being swallowed.
+
+  Verified end to end: the same `/route` turn against a stand now lands one
+  `user/message` with `source.kind: plugin:jev-subagent-dispatch` in the session
+  transcript; before the fix that count was zero.
+
 ## [0.7.4] - 2026-09-30
 
 ### Fixed

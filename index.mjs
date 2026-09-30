@@ -33,6 +33,7 @@
  */
 
 import { randomUUID } from "node:crypto";
+import { realpathSync } from "node:fs";
 import { appendFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { PLUGIN_NAME, PLUGIN_SOURCE_KIND, resolveConfig } from "./config.mjs";
@@ -62,20 +63,101 @@ export { Config } from "./src/host/index.js";
  */
 
 /**
- * Build a DSH user message via the pinned peer (`@deepseek-ai/dsh-llm`),
- * which owns message invariants including identity. Returns null when the
- * peer is unreachable (a bare checkout): the caller then SKIPS the
- * injection rather than fabricating a message that might violate the
- * session's format contract.
+ * The host's own `createUserMessage`, resolved once per process.
+ *
+ * A bare `import("@deepseek-ai/dsh-llm")` is NOT enough. A plugin installed as a
+ * `link:` (a dev checkout, which is how this one is normally run) has no
+ * node_modules of its own, and Node resolves bare specifiers from the importing
+ * module's REAL path — so the import fails, `pluginMessage` returns null, and
+ * every verdict AND every diagnostic is dropped in silence.
+ *
+ * The host's copy is found through the process entry point, which lives inside
+ * the DSH install root. That is also the instance the host itself builds its own
+ * injections with, so message identity invariants keep holding.
+ *
+ * @returns the factory, or null when neither resolution path works.
  */
-async function pluginMessage(content) {
+let messageFactory;
+
+/**
+ * Resolution anchors, most specific first: the entry point of the process that
+ * loaded this plugin. `dsh` is normally a symlink into the install root, so an
+ * anchor is realpath'd before being used as a resolution base — otherwise the
+ * lookup would start in `/usr/local/bin` and find nothing.
+ * @returns absolute candidate paths.
+ */
+function defaultBases() {
+  const bases = [];
+  if (typeof process.argv[1] === "string" && process.argv[1].length > 0) bases.push(process.argv[1]);
+  bases.push(join(process.cwd(), "noop.js"));
+  return bases;
+}
+
+/**
+ * @param bases - resolution anchors (injectable for tests).
+ * @returns the factory, or null when no resolution path works.
+ */
+export async function loadMessageFactory(bases = defaultBases()) {
+  if (messageFactory !== undefined) return messageFactory;
+  const loaders = bases.map((base) => async () => {
+    const { createRequire } = await import("node:module");
+    const { pathToFileURL } = await import("node:url");
+    let anchor = base;
+    try {
+      anchor = realpathSync(base);
+    } catch {
+      // Keep the given path; resolution reports it if it cannot be used.
+    }
+    return import(pathToFileURL(createRequire(anchor).resolve("@deepseek-ai/dsh-llm")).href);
+  });
+  loaders.push(() => import("@deepseek-ai/dsh-llm"));
+  for (const load of loaders) {
+    try {
+      const module = await load();
+      if (typeof module.createUserMessage === "function") {
+        messageFactory = module.createUserMessage;
+        return messageFactory;
+      }
+    } catch {
+      // Try the next resolution path; the caller reports if all of them fail.
+    }
+  }
+  messageFactory = null;
+  return messageFactory;
+}
+
+let warnedNoFactory = false;
+
+/**
+ * Build a DSH user message via the pinned peer (`@deepseek-ai/dsh-llm`), which
+ * owns message invariants including identity. Returns null when the peer is
+ * unreachable: the caller then SKIPS the injection rather than fabricating a
+ * message that might violate the session's format contract — but says so out
+ * loud, because a silent skip is what made this bug invisible for so long.
+ *
+ * @param content - the message text.
+ * @param logger - optional logger for the one-time failure report.
+ * @returns the message, or null.
+ */
+export async function pluginMessage(content, logger) {
+  const createUserMessage = await loadMessageFactory();
+  if (createUserMessage === null) {
+    if (!warnedNoFactory) {
+      warnedNoFactory = true;
+      logger?.warn?.("jev-subagent-dispatch: @deepseek-ai/dsh-llm is unreachable, so verdicts and diagnostics cannot be delivered — check the plugin's install layout");
+    }
+    return null;
+  }
   try {
-    const { createUserMessage } = await import("@deepseek-ai/dsh-llm");
     return createUserMessage({
       content: [{ type: "text", text: content }],
       source: { kind: PLUGIN_SOURCE_KIND, plugin: PLUGIN_NAME },
     });
-  } catch {
+  } catch (error) {
+    if (!warnedNoFactory) {
+      warnedNoFactory = true;
+      logger?.warn?.(`jev-subagent-dispatch: message construction failed — ${String(error?.message ?? error)}`);
+    }
     return null;
   }
 }
@@ -115,7 +197,9 @@ function summarizeMessages(messages, config) {
  * @param deps - optional dependency overrides for tests.
  */
 export async function apply(ctx, input = {}, deps = {}) {
-  const { pluginMessage: buildMessage = pluginMessage } = deps;
+  // `deps.pluginMessage` is the test seam; the default resolves the host's own
+  // factory and reports through the logger when it cannot.
+  const buildMessage = deps.pluginMessage ?? ((text) => pluginMessage(text, logger));
   const logger = ctx.logger;
   let warnedNoFactory = false;
 

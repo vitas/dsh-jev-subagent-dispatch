@@ -1,6 +1,6 @@
 {
   "name": "dsh-jev-subagent-dispatch",
-  "version": "0.7.4",
+  "version": "0.7.5",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/vitas/dsh-jev-subagent-dispatch.git"
@@ -69,12 +69,18 @@
     "jev-replay": "./bin/jev-replay.mjs"
   },
   "peerDependencies": {
-    "@deepseek-ai/schemastery": ">=3.18.1"
+    "@deepseek-ai/schemastery": ">=3.18.1",
+    "@deepseek-ai/dsh-llm": "^0.2.0-rc.2 || >=0.1.0-rc.6 <0.2.0"
   },
   "devDependencies": {
     "@deepseek-ai/schemastery": "^3.18.2",
     "@types/react": "^18.3.31",
     "esbuild": "^0.25.0",
     "typescript": "^5.9.3"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/dsh-llm": {
+      "optional": true
+    }
   }
 }
