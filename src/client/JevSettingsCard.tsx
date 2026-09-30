@@ -15,7 +15,7 @@
 import * as React from 'react'
 import { useCallback, useState, useSyncExternalStore } from 'react'
 import { localeRevision, subscribeLocale, tr } from './i18n.js'
-import type { JevScope, JevSettings } from './types.js'
+import type { JevScope, JevSettings, SubagentAllowlist } from './types.js'
 
 const MODES = [
   { id: 'off', labelKey: 'modeOff' as const },
@@ -57,6 +57,31 @@ function useScopeSnapshot(scope: JevScope) {
 /** Re-render when the active language changes. */
 function useLocaleRevision(): number {
   return useSyncExternalStore(subscribeLocale, localeRevision, localeRevision)
+}
+
+/**
+ * A scope that never changes and carries nothing, used when the deployment has
+ * no Subagent allowlist to read. `useSyncExternalStore` compares snapshots by
+ * reference, so this is one module constant: a fresh object per read would
+ * re-render forever.
+ */
+const NO_ALLOWLIST: ReturnType<JevScope['getSnapshot']> = {
+  status: 'unavailable', value: undefined, base: undefined, user: undefined, revision: undefined,
+}
+const NO_ALLOWLIST_SCOPE: JevScope = {
+  getSnapshot: () => NO_ALLOWLIST,
+  subscribe: () => () => {},
+  set: async () => {},
+  unset: async () => {},
+}
+
+/** The allowlist as `provider/model` keys the route selects offer. */
+function allowlistKeys(value: unknown): string[] {
+  const entries = (value as SubagentAllowlist | undefined)?.allowedModels
+  if (!Array.isArray(entries)) return []
+  return entries
+    .filter((entry) => entry?.provider && entry?.model)
+    .map((entry) => `${entry.provider}/${entry.model}`)
 }
 
 /** One labeled control: local draft while editing, parse-on-commit, reset-to-base. */
@@ -195,9 +220,11 @@ function Toggle(props: {
  * registration there passes `heading: false` rather than printing the title
  * twice.
  */
-export function JevSettingsCard(props: { scope: JevScope; heading?: boolean }) {
+export function JevSettingsCard(props: { scope: JevScope; allowlist?: JevScope; heading?: boolean }) {
   useLocaleRevision()
   const snap = useScopeSnapshot(props.scope)
+  const allowSnap = useScopeSnapshot(props.allowlist ?? NO_ALLOWLIST_SCOPE)
+  const allowed = allowlistKeys(allowSnap.value)
   const [pending, setPending] = useState(0)
   const value: JevSettings = snap.value ?? {}
   const writable = snap.writable !== false && snap.status === 'ready'
@@ -303,14 +330,54 @@ export function JevSettingsCard(props: { scope: JevScope; heading?: boolean }) {
         value={(value.triggers ?? []).join(', ')} overridden={overridden('triggers')} disabled={disabled}
         parse={list} onCommit={(parsed) => commit('triggers', parsed)} onReset={() => reset('triggers')}
       />
-      <Field
-        id="jev-routes" label={tr('routes')} hint={tr('routesHint')}
-        value={routesText(value.routes)} overridden={overridden('routes')} disabled={disabled}
-        parse={parseRoutes} onCommit={(parsed) => {
-          if (parsed === null) reset('routes')
-          else commit('routes', parsed)
-        }} onReset={() => reset('routes')} monospace
-      />
+      {allowed.length > 0 ? (
+        <div style={{ marginBottom: 12 }}>
+          <span style={labelStyle}>
+            {tr('routes')}
+            {overridden('routes') && (
+              <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 400, color: 'var(--dsw-alias-text-accent, #69f)' }}>
+                {tr('overridden')}
+                <button type="button" style={resetStyle} onClick={() => reset('routes')} disabled={disabled}>{tr('reset')}</button>
+              </span>
+            )}
+          </span>
+          {Object.entries(value.routes ?? {}).map(([role, target]) => {
+            const current = `${target?.provider}/${target?.model}`
+            // The shipped route may name a model this allowlist no longer carries;
+            // keep it visible as the current option instead of silently reselecting.
+            const options = allowed.includes(current) ? allowed : [current, ...allowed]
+            return (
+              <div key={role} style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
+                <label htmlFor={`jev-route-${role}`} style={{ ...labelStyle, minWidth: 110, marginBottom: 0 }}>{role}</label>
+                <select
+                  id={`jev-route-${role}`}
+                  style={{ ...inputStyle, width: 'auto', flex: 1 }}
+                  value={current}
+                  disabled={disabled}
+                  onChange={(event) => {
+                    const [provider, ...rest] = event.target.value.split('/')
+                    commit('routes', { ...value.routes, [role]: { provider, model: rest.join('/') } })
+                  }}
+                >
+                  {options.map((key) => (
+                    <option key={key} value={key}>{key}</option>
+                  ))}
+                </select>
+              </div>
+            )
+          })}
+          <p style={hintStyle}>{tr('routesPickHint')}</p>
+        </div>
+      ) : (
+        <Field
+          id="jev-routes" label={tr('routes')} hint={tr('routesHint')}
+          value={routesText(value.routes)} overridden={overridden('routes')} disabled={disabled}
+          parse={parseRoutes} onCommit={(parsed) => {
+            if (parsed === null) reset('routes')
+            else commit('routes', parsed)
+          }} onReset={() => reset('routes')} monospace
+        />
+      )}
       <Toggle
         id="jev-logturn" label={tr('logTurnText')} hint={tr('logTurnTextHint')}
         checked={value.logTurnText ?? false} overridden={overridden('logTurnText')} disabled={disabled}

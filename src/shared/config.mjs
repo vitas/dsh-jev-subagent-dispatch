@@ -31,6 +31,19 @@ export const PACKAGE_NAME = 'dsh-jev-subagent-dispatch'
  */
 export const ROW_CONFIG_KEY = `${PACKAGE_NAME}#${PLUGIN_NAME}`
 
+/**
+ * The namespace that owns the Subagent model allowlist, read by the browser half
+ * so the route selects can offer exactly the models dispatch is permitted to use.
+ *
+ * It belongs to another plugin, which DSH supports deliberately: `configForms.get`
+ * binds any served namespace, and the allowlist is the same list `capabilities.mjs`
+ * checks every verdict against. Naming it here keeps the read honest — the card
+ * offers what the policy enforces rather than a second, drifting copy. When that
+ * plugin is not composed the namespace is simply not served, and the card falls
+ * back to its raw field.
+ */
+export const SUBAGENT_ALLOWLIST_NAMESPACE = 'subagent-model-selection-settings'
+
 /** Activation modes. `off` classifies nothing; the listener stays quiet. */
 export const MODES = ['off', 'once', 'auto']
 

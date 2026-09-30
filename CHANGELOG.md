@@ -4,6 +4,27 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 semantic versioning.
 
+## [0.5.0] - 2026-09-30
+
+Choosing a route is now a choice, not a spelling test. Each role gets its own
+select fed by your Subagent allowlist — the same list every verdict is checked
+against — so a route can no longer name a model dispatch is forbidden to use.
+
+### Added
+
+- One model select per role (`implementer`, `researcher`, and any role a profile
+  adds), with the options read live from the `subagent-model-selection-settings`
+  namespace through `configForms.get`, the framework's supported way to bind a
+  namespace another plugin owns.
+- A current value outside the allowlist stays visible as its own option instead of
+  being silently reselected, so a stranded route is something you can see.
+
+### Changed
+
+- The raw `role=provider/model` field remains as the fallback wherever that
+  namespace is not served — DSH 0.1.5, or a deployment without the Subagent
+  model-selection plugin — so the card never loses the ability to set routes.
+
 ## [0.4.0] - 2026-09-30
 
 Routes are editable in the settings card. They were the one nested field the card

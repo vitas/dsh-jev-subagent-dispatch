@@ -6,7 +6,7 @@ export type CopyKey =
   | 'provider' | 'profile' | 'profileHint'
   | 'endpoint' | 'apiPath' | 'apiKeyEnv' | 'apiKeyEnvHint' | 'model'
   | 'triggers' | 'triggersHint' | 'timeoutMs' | 'stateChars'
-  | 'routes' | 'routesHint'
+  | 'routes' | 'routesHint' | 'routesPickHint'
   | 'logDir' | 'logDirHint' | 'logTurnText' | 'logTurnTextHint'
   | 'overridden' | 'reset' | 'saving' | 'unavailable'
   | 'advanced' | 'advancedHint'
@@ -30,6 +30,7 @@ export const en: Record<CopyKey, string> = {
   triggersHint: 'Comma-separated; only used in “On request” mode.',
   routes: 'Routes',
   routesHint: 'Comma-separated role=provider/model. Every model must be one your Subagent allowlist permits, or the verdict has nowhere to dispatch. Empty restores the shipped defaults.',
+  routesPickHint: 'One choice per role, taken from your Subagent allowlist — so nothing here can name a model that would leave a verdict stranded.',
   timeoutMs: 'Call timeout (ms)',
   stateChars: 'State cap (chars)',
   logDir: 'Verdict log directory',
@@ -63,6 +64,7 @@ export const zh: Record<CopyKey, string> = {
   triggersHint: '逗号分隔；仅在“按请求”模式下使用。',
   routes: '路由',
   routesHint: '逗号分隔 role=provider/model。模型必须在子代理白名单内，否则判定结果无处可去。留空恢复默认值。',
+  routesPickHint: '每个角色从子代理白名单中选择模型——这样就不会写出让判定无处可去的路由。',
   timeoutMs: '调用超时（毫秒）',
   stateChars: '状态上限（字符）',
   logDir: '判定日志目录',
@@ -96,6 +98,7 @@ export const ru: Record<CopyKey, string> = {
   triggersHint: 'Через запятую; используются только в режиме «По запросу».',
   routes: 'Маршруты',
   routesHint: 'Через запятую: роль=провайдер/модель. Модель должна быть в вашем списке разрешённых для субагентов, иначе вердикту некуда вести. Пусто — вернуть значения по умолчанию.',
+  routesPickHint: 'По выбору на каждую роль, из вашего списка разрешённых для субагентов — сюда нельзя вписать модель, из-за которой вердикт останется без адреса.',
   timeoutMs: 'Тайм-аут вызова (мс)',
   stateChars: 'Лимит состояния (символов)',
   logDir: 'Каталог лога вердиктов',

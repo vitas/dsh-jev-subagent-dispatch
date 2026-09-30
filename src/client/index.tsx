@@ -24,7 +24,7 @@ import * as React from 'react'
 import { JevSettingsCard } from './JevSettingsCard.js'
 import { bindTranslator, notifyLocale } from './i18n.js'
 import { en, zh, ru } from './locales.js'
-import { PACKAGE_NAME, PLUGIN_NAME, ROW_CONFIG_KEY, SETTINGS_NAMESPACE as NS } from '../shared/config.mjs'
+import { PACKAGE_NAME, PLUGIN_NAME, ROW_CONFIG_KEY, SETTINGS_NAMESPACE as NS, SUBAGENT_ALLOWLIST_NAMESPACE } from '../shared/config.mjs'
 
 /** Register the copy dictionaries and bind the translator. */
 function wireLocale(ctx: any): void {
@@ -72,7 +72,15 @@ function registerRowConfig(ctx: any): void {
     const card = (props: { view?: string }) =>
       props?.view === 'summary'
         ? null
-        : React.createElement(JevSettingsCard, { scope: c.configForms.get(NS), heading: false })
+        : React.createElement(JevSettingsCard, {
+          scope: c.configForms.get(NS),
+          // The Subagent allowlist lives in another plugin's namespace. Reading it
+          // is what lets the route selects offer only models dispatch may use; if
+          // that plugin is absent the scope simply reports nothing and the card
+          // keeps its raw field.
+          allowlist: c.configForms.get(SUBAGENT_ALLOWLIST_NAMESPACE),
+          heading: false,
+        })
 
     // Each surface is guarded on its own, so a loader that predates the package
     // slot still gets the row page instead of losing the form entirely.

@@ -23,6 +23,18 @@ export interface JevSettings {
   routes?: Record<string, { provider?: string; model?: string }>
 }
 
+/**
+ * The slice of the `subagent-model-selection-settings` namespace this card
+ * reads. The allowlist lives in another plugin's namespace, which DSH supports
+ * on purpose: `configForms.get(ns)` binds any served namespace, so the card can
+ * offer exactly the models dispatch is allowed to use instead of taking a model
+ * name on trust. Absent when that plugin is not composed — the card then falls
+ * back to the raw field.
+ */
+export interface SubagentAllowlist {
+  allowedModels?: Array<{ provider?: string; model?: string }>
+}
+
 /** Minimal slice of the framework settings scope this card consumes. */
 export interface JevScope {
   getSnapshot(): {
