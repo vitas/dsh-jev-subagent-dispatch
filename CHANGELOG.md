@@ -11,11 +11,13 @@ semantic versioning.
 - **A `review` task class and a `reviewer` role.** "Review this change", "a
   second opinion on that diff", "audit this plan" now classify as their own class
   and get their own route instead of being folded into `research` or argued about
-  as `feature_work`. The role ships pointed at `openai-codex/gpt-5.6-sol` — the
-  ChatGPT-subscription route — because the point of a reviewer is a *different,
-  stronger* model than the one that wrote the change. Point it anywhere,
-  including at your own gateway, with one select in the card; a route that is not
-  composed fails loudly and names the role.
+  as `feature_work`. The role ships on the same example gateway as the others —
+  this plugin names no particular provider, because which models exist is your
+  composition's business — and the role asks one thing of whoever configures it:
+  point it at a *different* model than your implementer, since a second opinion
+  from the model that wrote the change is worth less. One select in the card, or
+  one line in the patch; a route that is not composed fails loudly and names the
+  role.
 - `review` joins the `auto` profile's `delegate.taskClass`, so an explicit
   `/route review …` and an ordinary review request are both delegated by default.
   The `careful` profile still delegates only `mechanical`.

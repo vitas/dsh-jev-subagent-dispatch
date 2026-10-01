@@ -306,15 +306,16 @@ test("verdict: research routes to the researcher", () => {
 });
 
 test("verdict: review routes to the reviewer, not to the implementer", () => {
-  // The reviewer is the one role whose value is a *different, stronger* model
-  // than the one that wrote the change, so it ships on the subscription route.
+  // The class is what this change is about. The route is a profile choice, and
+  // the shipped one names no subscription: it is the same example gateway the
+  // other roles ship on.
   const answers = normalizeAnswers(documentedAnswers({
     task_class: { type: "choice", choice: "review", confidence: 0.9 },
   }), config.questions);
   const decision = decide({ answers, model: "m" }, config);
   assert.equal(decision.action, "delegate");
   assert.equal(decision.role, "reviewer");
-  assert.deepEqual(decision.route, { provider: "openai-codex", model: "gpt-5.6-sol" });
+  assert.deepEqual(decision.route, { provider: "openrouter", model: "qwen3.8-flash" });
 });
 
 test("verdict: unknown choice name fails closed", () => {

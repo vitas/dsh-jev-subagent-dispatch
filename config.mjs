@@ -188,17 +188,19 @@ export const DEFAULT_PROFILES = {
  * same model id; they are separate keys so a profile can move each independently,
  * which the configuration card makes a two-click change.
  *
- * `reviewer` is the odd one out on purpose: the value of the role is that it is a
- * *different, stronger* model than the one that wrote the change, so it ships
- * pointed at the ChatGPT-subscription route instead of at the same cheap gateway
- * as the others. Point it anywhere — a route that is not composed fails loudly in
- * the recommendation, naming the role.
+ * `reviewer` is a role like any other, and it ships on the same example gateway
+ * as the rest: which models exist is your composition's business, not this
+ * plugin's. The one thing the role asks of you is that you point it at a
+ * *different* model than your implementer — a second opinion from the model that
+ * wrote the change, or from its twin, is worth less — and the card offers every
+ * model your Subagent allowlist permits, so that is one select. A route that is
+ * not composed fails loudly in the recommendation, naming the role.
  */
 export const DEFAULT_ROUTES = {
   junior: { provider: "openrouter", model: "qwen3.8-flash" },
   implementer: { provider: "openrouter", model: "deepseek-v4-flash" },
   researcher: { provider: "openrouter", model: "qwen3.8-flash" },
-  reviewer: { provider: "openai-codex", model: "gpt-5.6-sol" },
+  reviewer: { provider: "openrouter", model: "qwen3.8-flash" },
 };
 
 /** Credential-shaped strings never leave the machine (or reach the log). */
