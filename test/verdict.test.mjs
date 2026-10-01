@@ -91,6 +91,18 @@ test("contract: classify returns usage and response model", async () => {
   assert.ok(Number.isFinite(verdict.latencyMs));
 });
 
+test("mock: a review is its own class, and a preview is not a review", async () => {
+  // The mock only wires tests, but its matching is still a WORD match: the
+  // substring "preview" contains "review" and used to hijack a preview verdict
+  // into the new class.
+  const review = await classify({ ...config, mock: true }, "review the diff in stats.mjs");
+  assert.equal(review.answers.task_class.value, "review");
+  const second = await classify({ ...config, mock: true }, "give me a second opinion on this patch");
+  assert.equal(second.answers.task_class.value, "review");
+  const preview = await classify({ ...config, mock: true }, "preview architecture redesign request");
+  assert.equal(preview.answers.task_class.value, "refactor", "preview must classify as the restructure it is");
+});
+
 test("providers: presets choose endpoint, api path, key env, and model", () => {
   const ts = resolveConfig({});
   assert.equal(ts.provider, "typesafe");
