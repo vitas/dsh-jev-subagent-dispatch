@@ -21,13 +21,14 @@ The injection is **advice, not enforcement**: the main agent weighs it and can i
 | `mechanical` — renames, reformatting, comments, boilerplate | `junior` | `openrouter/qwen3.8-flash` | yes |
 | `bugfix` | `implementer` | `openrouter/deepseek-v4-flash` | yes |
 | `research` | `researcher` | `openrouter/qwen3.8-flash` | yes |
+| `review` — a second opinion on work that already exists | `reviewer` | `openai-codex/gpt-5.6-sol` | yes |
 | `refactor`, `feature_work`, `meta_chat` | — | — | **no** — absent from `profiles.*.delegate.taskClass`, so they never reach a route |
 
 *Delegated* is the shipped `auto` profile. The stricter `careful` profile delegates only `mechanical`, and the predicate's ceilings (effort, blast radius, per-question probabilities) can hold any class back regardless of its role.
 
 ![One model select per role, each offering the models your Subagent allowlist permits](https://raw.githubusercontent.com/vitas/dsh-jev-subagent-dispatch/main/docs/settings-routes.png)
 
-Roles name the worker, classes name the work. `routeFor` maps a class to a role and `routes` maps a role to a model, so you can add a role, or point an existing one at a different model, without touching the rubric. `junior` exists because `mechanical` and `bugfix` are delegated together but are not one job — a rename has an unambiguous spec, a bug fix has to find the cause first — and it is the role to point at your cheapest model.
+Roles name the worker, classes name the work. `routeFor` maps a class to a role and `routes` maps a role to a model, so you can add a role, or point an existing one at a different model, without touching the rubric. `junior` exists because `mechanical` and `bugfix` are delegated together but are not one job — a rename has an unambiguous spec, a bug fix has to find the cause first — and it is the role to point at your cheapest model. `reviewer` is the exception that proves the point: it exists so that a change is judged by a **different** model than the one that wrote it, so it ships on the subscription route (`openai-codex/gpt-5.6-sol`) instead of the cheap gateway the others share. Point it anywhere — a route that is not composed fails loudly, naming the role.
 
 Everything below is the detail behind those facts; the failure modes are in [Dispatch capability is a prerequisite](#dispatch-capability-is-a-prerequisite).
 
@@ -147,10 +148,12 @@ routeFor:            # task class → role that takes it
   mechanical: junior  # roles name the worker; the class keeps its own name
   bugfix: implementer
   research: researcher
+  review: reviewer
 routes:              # role → the model that role runs on
   junior:      { provider: openrouter, model: qwen3.8-flash }
   implementer: { provider: openrouter, model: deepseek-v4-flash }
   researcher:  { provider: openrouter, model: qwen3.8-flash }
+  reviewer:    { provider: openai-codex, model: gpt-5.6-sol }
 ```
 
 Delegation is recommended only when **all** of it holds: the declarative predicate over the answers (score ≤ ceiling, so boundary values pass; a missing answer fails closed), and the primary confidence above the profile floor. Two shipped profiles: `auto` delegates readily; `careful` (confidence 0.85, effort ≤ 0.5, blast radius ≤ 0.5) for repositories where a wrong delegation is expensive. Tune coefficients in config, not prompts. If you would rather gate on the *probability of exceeding* a level than on the numeric score, read `probabilities` from the score answer — the log records them per turn.

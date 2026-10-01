@@ -60,6 +60,8 @@ export const DEFAULT_QUESTIONS = {
         "Restructure code without changing behavior; design decisions involved.",
       research:
         "Gather facts, read code, compare options; change nothing.",
+      review:
+        "Judge work that already exists — a change set, a diff, a plan — for defects, and report rather than fix.",
       meta_chat:
         "Conversation, questions, or planning; no code task in this turn.",
     },
@@ -147,7 +149,7 @@ export const DEFAULT_PROFILES = {
   auto: {
     confidenceMin: 0.7,
     delegate: {
-      taskClass: ["mechanical", "bugfix", "research"],
+      taskClass: ["mechanical", "bugfix", "research", "review"],
       effortMax: 1.5,
       blastRadiusMax: 1.5,
       maxNoul: { needs_repo_context: 0.5, user_explicit: 0.3, risky: 0.2 },
@@ -172,23 +174,31 @@ export const DEFAULT_PROFILES = {
 /**
  * Named routes: role → the subagent model that should take it.
  *
- * Three roles, not two, because the `mechanical` and `bugfix` task classes are
- * delegated together but are not the same job: a rename or a reformat has an
- * unambiguous spec, while a bug fix has to find the cause first. Sharing one
- * model meant paying the bug-fix price for renames. `refactor`, `feature_work`
- * and `meta_chat` are deliberately absent from `profiles.*.delegate.taskClass`,
- * so they never reach a route at all — they stay with the main agent.
+ * Four roles. `junior` and `implementer` are separate because the `mechanical`
+ * and `bugfix` task classes are delegated together but are not the same job: a
+ * rename or a reformat has an unambiguous spec, while a bug fix has to find the
+ * cause first. Sharing one model meant paying the bug-fix price for renames.
+ * `refactor`, `feature_work` and `meta_chat` are deliberately absent from
+ * `profiles.*.delegate.taskClass`, so they never reach a route at all — they stay
+ * with the main agent.
  *
  * Roles name the worker, not the work: the class is `mechanical`, the role that
  * takes it is `junior` — well-specified jobs, no diagnosis, so it is the one to
- * point at whatever your cheapest model is. `junior` and `researcher` ship on
- * the same model id; they are separate keys so a profile can move each
- * independently, which the configuration card makes a two-click change.
+ * point at whatever your cheapest model is. `junior` and `researcher` ship on the
+ * same model id; they are separate keys so a profile can move each independently,
+ * which the configuration card makes a two-click change.
+ *
+ * `reviewer` is the odd one out on purpose: the value of the role is that it is a
+ * *different, stronger* model than the one that wrote the change, so it ships
+ * pointed at the ChatGPT-subscription route instead of at the same cheap gateway
+ * as the others. Point it anywhere — a route that is not composed fails loudly in
+ * the recommendation, naming the role.
  */
 export const DEFAULT_ROUTES = {
   junior: { provider: "openrouter", model: "qwen3.8-flash" },
   implementer: { provider: "openrouter", model: "deepseek-v4-flash" },
   researcher: { provider: "openrouter", model: "qwen3.8-flash" },
+  reviewer: { provider: "openai-codex", model: "gpt-5.6-sol" },
 };
 
 /** Credential-shaped strings never leave the machine (or reach the log). */
@@ -256,7 +266,7 @@ export function defaults() {
     questions: structuredClone(DEFAULT_QUESTIONS),
     activeProfile: "auto",
     profiles: structuredClone(DEFAULT_PROFILES),
-    routeFor: { mechanical: "junior", bugfix: "implementer", research: "researcher" },
+    routeFor: { mechanical: "junior", bugfix: "implementer", research: "researcher", review: "reviewer" },
     defaultRoute: "implementer",
     routes: structuredClone(DEFAULT_ROUTES),
     // Turn triggers for `once` mode (and preview requests in `auto`).

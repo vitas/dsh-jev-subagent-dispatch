@@ -1,6 +1,6 @@
 {
   "name": "dsh-jev-subagent-dispatch",
-  "version": "0.7.5",
+  "version": "0.8.0",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/vitas/dsh-jev-subagent-dispatch.git"

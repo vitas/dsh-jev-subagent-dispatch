@@ -259,6 +259,9 @@ function mockAnswers(config, state) {
   for (const [id, question] of Object.entries(config.questions)) {
     if (question.type === "choice" && id === "task_class") {
       const keywordMap = {
+        review: "review",
+        critique: "review",
+        "second opinion": "review",
         rename: "mechanical",
         format: "mechanical",
         typo: "mechanical",
@@ -273,7 +276,9 @@ function mockAnswers(config, state) {
       };
       let choice = "feature_work";
       for (const [word, value] of Object.entries(keywordMap)) {
-        if (text.includes(word)) {
+        // Word prefix, not bare substring: "preview" must not read as "review".
+        const pattern = new RegExp(`\\b${word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`);
+        if (pattern.test(text)) {
           choice = value;
           break;
         }

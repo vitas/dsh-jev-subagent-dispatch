@@ -4,6 +4,24 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 semantic versioning.
 
+## [0.8.0] - 2026-10-01
+
+### Added
+
+- **A `review` task class and a `reviewer` role.** "Review this change", "a
+  second opinion on that diff", "audit this plan" now classify as their own class
+  and get their own route instead of being folded into `research` or argued about
+  as `feature_work`. The role ships pointed at `openai-codex/gpt-5.6-sol` — the
+  ChatGPT-subscription route — because the point of a reviewer is a *different,
+  stronger* model than the one that wrote the change. Point it anywhere,
+  including at your own gateway, with one select in the card; a route that is not
+  composed fails loudly and names the role.
+- `review` joins the `auto` profile's `delegate.taskClass`, so an explicit
+  `/route review …` and an ordinary review request are both delegated by default.
+  The `careful` profile still delegates only `mechanical`.
+- The mock classifier answers `review`, `critique`, and `second opinion` with the
+  new class, so profile wiring can be exercised without the live API.
+
 ## [0.7.5] - 2026-09-30
 
 ### Fixed
